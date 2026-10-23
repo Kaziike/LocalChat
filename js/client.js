@@ -37,10 +37,11 @@ let msgSearchQuery = '';
 // --- WebRTC State ---
 const peerConnections = {}; // targetId -> RTCPeerConnection
 const dataChannels = {};    // targetId -> RTCDataChannel
+// Cấu hình STUN/TURN cho WebRTC
 const rtcConfig = {
     iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:stun.l.google.com:19302' },  // STUN Server chính
+        { urls: 'stun:stun1.l.google.com:19302' }   // STUN Server dự phòng
     ]
 };
 
@@ -64,7 +65,7 @@ socket.on('user list', (userList) => {
     users = userList;
     updateSidebar();
     updateChatHeader();
-    
+
     // WebRTC: Connect to new users
     if (myInfo) {
         users.forEach(user => {
@@ -153,73 +154,74 @@ let receivingFiles = {}; // fileId -> { chunks: [], name: '', size: 0, received:
 
 function setupDataChannel(dc, targetId) {
     dataChannels[targetId] = dc;
-    
+    dc.binaryType = 'arraybuffer'; // Bắt buộc để nhận ArrayBuffer thay vì Blob
+
     dc.onopen = () => console.log(`DataChannel opened with ${targetId}`);
     dc.onclose = () => {
         console.log(`DataChannel closed with ${targetId}`);
         delete dataChannels[targetId];
         delete peerConnections[targetId];
     };
-    
+
     dc.onmessage = async (event) => {
-        const data = JSON.parse(event.data);
         const senderInfo = users.find(u => u.id === targetId);
         if (!senderInfo) return;
 
-        if (data.type === 'text') {
-            handleIncomingMessage({
-                from: senderInfo,
-                to: data.to,
-                content: data.content,
-                isFile: false,
-                timestamp: data.timestamp
-            });
-        } 
-        else if (data.type === 'file-start') {
-            receivingFiles[data.fileId] = {
-                name: data.fileName,
-                size: data.size,
-                chunks: [],
-                received: 0,
-                to: data.to,
-                timestamp: data.timestamp
-            };
-        }
-        else if (data.type === 'file-chunk') {
-            const fileData = receivingFiles[data.fileId];
-            if (fileData) {
-                fileData.chunks.push(data.chunk);
-                fileData.received += data.chunk.length;
+        // Nếu nhận được String -> Là JSON (tin nhắn text, metadata)
+        if (typeof event.data === 'string') {
+            const data = JSON.parse(event.data);
+
+            if (data.type === 'text') {
+                handleIncomingMessage({
+                    from: senderInfo,
+                    to: data.to,
+                    content: data.content,
+                    isFile: false,
+                    timestamp: data.timestamp
+                });
+            }
+            else if (data.type === 'file-start') {
+                // Khởi tạo trạng thái nhận file cho người gửi này
+                receivingFiles[targetId] = {
+                    name: data.fileName,
+                    size: data.size,
+                    chunks: [],
+                    received: 0,
+                    to: data.to,
+                    timestamp: data.timestamp
+                };
+            }
+            else if (data.type === 'file-end') {
+                const fileData = receivingFiles[targetId];
+                if (fileData) {
+                    try {
+                        // Trình duyệt tự động ghép các ArrayBuffer lại thành 1 file siêu tốc
+                        const blob = new Blob(fileData.chunks);
+                        const fileUrl = URL.createObjectURL(blob);
+
+                        handleIncomingMessage({
+                            from: senderInfo,
+                            to: fileData.to,
+                            content: '',
+                            isFile: true,
+                            fileName: fileData.name,
+                            fileUrl: fileUrl,
+                            timestamp: fileData.timestamp
+                        });
+                    } catch (e) {
+                        console.error("Lỗi khi tạo file từ nhị phân:", e);
+                    } finally {
+                        delete receivingFiles[targetId];
+                    }
+                }
             }
         }
-        else if (data.type === 'file-end') {
-            const fileData = receivingFiles[data.fileId];
+        // Nếu nhận được ArrayBuffer -> Là mảnh nhỏ (chunk) của file
+        else if (event.data instanceof ArrayBuffer) {
+            const fileData = receivingFiles[targetId];
             if (fileData) {
-                try {
-                    // Assemble base64 chunks
-                    const base64Data = fileData.chunks.join('');
-                    
-                    // Natively convert base64 to Blob using Fetch API (very efficient)
-                    const response = await fetch(`data:application/octet-stream;base64,${base64Data}`);
-                    const blob = await response.blob();
-                    
-                    // Create local URL
-                    const fileUrl = URL.createObjectURL(blob);
-                    
-                    handleIncomingMessage({
-                        from: senderInfo,
-                        to: fileData.to,
-                        content: '',
-                        isFile: true,
-                        fileName: fileData.name,
-                        fileUrl: fileUrl,
-                        timestamp: fileData.timestamp
-                    });
-                } catch (e) {
-                    console.error("Lỗi khi giải nén file:", e);
-                } finally {
-                    delete receivingFiles[data.fileId];
-                }
+                fileData.chunks.push(event.data);
+                fileData.received += event.data.byteLength;
             }
         }
     };
@@ -242,16 +244,14 @@ function handleIncomingMessage(msg) {
 
 function sendViaWebRTC(payload) {
     const payloadStr = JSON.stringify(payload);
-    
+
     if (payload.to === 'general') {
-        // Send to everyone
         Object.values(dataChannels).forEach(dc => {
             if (dc.readyState === 'open') {
                 dc.send(payloadStr);
             }
         });
     } else {
-        // Direct message
         const dc = dataChannels[payload.to];
         if (dc && dc.readyState === 'open') {
             dc.send(payloadStr);
@@ -259,71 +259,102 @@ function sendViaWebRTC(payload) {
     }
 }
 
+// Hàm hỗ trợ gửi buffer thô (binary)
+function sendBinaryViaWebRTC(arrayBuffer, toChat) {
+    if (toChat === 'general') {
+        Object.values(dataChannels).forEach(dc => {
+            if (dc.readyState === 'open') {
+                dc.send(arrayBuffer);
+            }
+        });
+    } else {
+        const dc = dataChannels[toChat];
+        if (dc && dc.readyState === 'open') {
+            dc.send(arrayBuffer);
+        }
+    }
+}
+
+// Hàm kiểm tra và chờ xả bộ nhớ đệm (Chống lỗi buffer overflow cho file lớn >30MB)
+async function waitWebRTCBuffer(toChat) {
+    const MAX_BUFFER = 1024 * 1024; // Giới hạn 1MB trong hàng đợi
+    let isFull = true;
+
+    while (isFull) {
+        isFull = false;
+        if (toChat === 'general') {
+            Object.values(dataChannels).forEach(dc => {
+                if (dc.readyState === 'open' && dc.bufferedAmount > MAX_BUFFER) {
+                    isFull = true;
+                }
+            });
+        } else {
+            const dc = dataChannels[toChat];
+            if (dc && dc.readyState === 'open' && dc.bufferedAmount > MAX_BUFFER) {
+                isFull = true;
+            }
+        }
+
+        if (isFull) {
+            await new Promise(r => setTimeout(r, 10)); // Đợi 10ms để xả bớt
+        }
+    }
+}
+
 // --- File Sending Logic (Chunking) ---
 async function sendFile(file, toChat) {
-    const fileId = generateId();
     const timestamp = new Date().toISOString();
-    
-    // 1. Notify start
+
+    // 1. Notify start (Gửi JSON thông báo chuẩn bị nhận file)
     sendViaWebRTC({
         type: 'file-start',
-        fileId: fileId,
         fileName: file.name,
         size: file.size,
         to: toChat,
         timestamp: timestamp
     });
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-        // Lấy chuỗi base64 của toàn bộ file
-        const base64String = e.target.result.split(',')[1];
-        
-        // 2. Cắt chuỗi base64 thành các mảnh nhỏ và gửi
-        const chunkSize = 16384; // 16KB
-        for (let i = 0; i < base64String.length; i += chunkSize) {
-            const chunk = base64String.slice(i, i + chunkSize);
-            sendViaWebRTC({
-                type: 'file-chunk',
-                fileId: fileId,
-                chunk: chunk
-            });
-            
-            // Chống đầy bộ nhớ đệm (buffer overflow) của WebRTC với file lớn
-            if (i % (chunkSize * 20) === 0) {
-                await new Promise(r => setTimeout(r, 5)); 
-            }
-        }
-        
-        // 3. Notify end
-        sendViaWebRTC({
-            type: 'file-end',
-            fileId: fileId
-        });
-        
-        // Thêm vào giao diện máy gửi
-        const fileUrl = URL.createObjectURL(file);
-        const msg = {
-            from: myInfo,
-            to: toChat,
-            content: '',
-            isFile: true,
-            fileName: file.name,
-            fileUrl: fileUrl,
-            timestamp: timestamp
-        };
-        if (!chatHistory[toChat]) chatHistory[toChat] = [];
-        chatHistory[toChat].push(msg);
-        
-        if (currentActiveChat === toChat) {
-            renderMessage(msg);
-            scrollToBottom();
-        }
-        updateSidebar();
+    // 2. Cắt file thành các mảnh nhị phân (ArrayBuffer) và bắn trực tiếp
+    const chunkSize = 65536; // Nâng lên 64KB vì truyền nhị phân rất nhẹ
+    let offset = 0;
+
+    while (offset < file.size) {
+        // Kiểm tra và chờ xả buffer trước khi nhồi thêm gói tin mới
+        await waitWebRTCBuffer(toChat);
+
+        const slice = file.slice(offset, offset + chunkSize);
+        const arrayBuffer = await slice.arrayBuffer(); // Lấy mã nhị phân trực tiếp
+
+        sendBinaryViaWebRTC(arrayBuffer, toChat);
+
+        offset += chunkSize;
+    }
+
+    // 3. Notify end (Gửi JSON báo hiệu kết thúc file)
+    sendViaWebRTC({
+        type: 'file-end',
+        to: toChat
+    });
+
+    // Thêm vào giao diện máy gửi
+    const fileUrl = URL.createObjectURL(file);
+    const msg = {
+        from: myInfo,
+        to: toChat,
+        content: '',
+        isFile: true,
+        fileName: file.name,
+        fileUrl: fileUrl,
+        timestamp: timestamp
     };
-    
-    // Đọc toàn bộ file thành chuỗi DataURL (Base64)
-    reader.readAsDataURL(file);
+    if (!chatHistory[toChat]) chatHistory[toChat] = [];
+    chatHistory[toChat].push(msg);
+
+    if (currentActiveChat === toChat) {
+        renderMessage(msg);
+        scrollToBottom();
+    }
+    updateSidebar();
 }
 
 
@@ -331,7 +362,7 @@ async function sendFile(file, toChat) {
 function updateSidebar() {
     const query = userSearchInput.value.toLowerCase();
     let html = '';
-    
+
     if ("nhóm chung nội bộ".includes(query) || query === "") {
         html += `
             <div class="chat-item ${currentActiveChat === 'general' ? 'active' : ''}" data-id="general" id="chat-general" onclick="switchChat('general')">
@@ -353,7 +384,7 @@ function updateSidebar() {
 
     users.forEach(user => {
         if (myInfo && user.id === myInfo.id) return;
-        
+
         if (user.name.toLowerCase().includes(query) || query === "") {
             html += `
                 <div class="chat-item ${currentActiveChat === user.id ? 'active' : ''}" data-id="${user.id}" onclick="switchChat('${user.id}')">
@@ -417,14 +448,14 @@ function getLastMessagePreview(chatId) {
     return `${prefix}${msg.content}`;
 }
 
-window.switchChat = function(chatId) {
+window.switchChat = function (chatId) {
     currentActiveChat = chatId;
-    
+
     msgSearchQuery = '';
     messageSearchInput.value = '';
     messageSearchContainer.style.display = 'none';
     toggleMsgSearchBtn.style.display = 'block';
-    
+
     updateSidebar();
     updateChatHeader();
     renderChatHistory();
@@ -432,7 +463,7 @@ window.switchChat = function(chatId) {
 
 function renderChatHistory() {
     messagesContainer.innerHTML = '<div class="date-divider"><span>Hôm nay</span></div>';
-    
+
     const history = chatHistory[currentActiveChat] || [];
     history.forEach(msg => {
         if (msgSearchQuery && !msg.isFile) {
@@ -498,7 +529,7 @@ chatForm.addEventListener('submit', (e) => {
             content: content,
             timestamp: timestamp
         };
-        
+
         // Send via P2P
         sendViaWebRTC(payload);
 
@@ -512,11 +543,11 @@ chatForm.addEventListener('submit', (e) => {
         };
         if (!chatHistory[currentActiveChat]) chatHistory[currentActiveChat] = [];
         chatHistory[currentActiveChat].push(msg);
-        
+
         renderMessage(msg);
         scrollToBottom();
         updateSidebar();
-        
+
         messageInput.value = '';
     }
 });
@@ -536,7 +567,7 @@ fileInput.addEventListener('change', async (e) => {
 
     // Send the file over P2P DataChannels
     await sendFile(file, currentActiveChat);
-    
+
     fileInput.value = '';
     attachBtn.innerHTML = btnIcon;
     attachBtn.disabled = false;

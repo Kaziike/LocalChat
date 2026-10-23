@@ -11,9 +11,10 @@ const io = new Server(server, {
 
 app.use(express.static(path.join(__dirname, '..')));
 
-// Since you are running this locally on your LAN, devices will have different local IPs (192.168.1.x)
-// Grouping strictly by IP isolates them. We will put everyone connecting to this server in the same group.
-let connectedUsers = {};
+// Quản lý các phòng (Rooms)
+// Nếu dùng chung Public IP (cùng mạng Wi-Fi ra internet) -> Chung phòng.
+// Nếu truy cập bằng Local IP (192.168.x.x) -> Chung phòng mạng nội bộ.
+let rooms = {};
 
 function getDeviceIP(socket) {
     let ip = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
@@ -23,31 +24,59 @@ function getDeviceIP(socket) {
     return ip.trim();
 }
 
+function getRoomId(ip) {
+    // Nhận diện dải IP nội bộ (LAN) cho IPv4
+    const isLocal = ip === '127.0.0.1' || 
+                    ip.startsWith('192.168.') || 
+                    ip.startsWith('10.') || 
+                    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip);
+    
+    if (isLocal) {
+        return 'LAN-Network';
+    }
+
+    // Xử lý IPv6 (Ví dụ: mạng Viettel/VNPT dùng IPv6)
+    // Trong IPv6, các thiết bị chung Wi-Fi sẽ có ĐỊA CHỈ KHÁC NHAU hoàn toàn.
+    // NHƯNG chúng sẽ CHUNG DẢI MẠNG (Prefix /64) gồm 4 cụm đầu tiên.
+    // Nên ta sẽ gom nhóm phòng theo 4 cụm đầu của IPv6 thay vì toàn bộ IP.
+    if (ip.includes(':')) {
+        const blocks = ip.split(':');
+        if (blocks.length >= 4) {
+            return 'IPv6-Network-' + blocks.slice(0, 4).join(':');
+        }
+    }
+    
+    return ip; // Với IPv4 Public (ngrok), lấy chính IP đó làm tên phòng
+}
+
 io.on('connection', (socket) => {
     const ip = getDeviceIP(socket);
-    console.log(`Thiết bị kết nối: ${socket.id} từ IP: ${ip}`);
+    const roomId = getRoomId(ip);
     
-    // Tên mặc định là IP
+    console.log(`Thiết bị kết nối: ${socket.id} | IP: ${ip} | Phòng: ${roomId}`);
+    
     const userName = ip;
     
-    connectedUsers[socket.id] = { id: socket.id, name: userName, ip: ip };
-
-    // Gửi thông tin cá nhân
-    socket.emit('your info', connectedUsers[socket.id]);
+    if (!rooms[roomId]) {
+        rooms[roomId] = {};
+    }
     
-    // Phát danh sách toàn bộ thiết bị đang kết nối tới server
-    io.emit('user list', Object.values(connectedUsers));
+    rooms[roomId][socket.id] = { id: socket.id, name: userName, ip: ip };
+    socket.join(roomId);
 
-    // Đổi tên
+    socket.emit('your info', rooms[roomId][socket.id]);
+    
+    // Chỉ phát danh sách cho những người TRONG CÙNG PHÒNG (cùng mạng)
+    io.to(roomId).emit('user list', Object.values(rooms[roomId]));
+
     socket.on('change name', (newName) => {
-        if (connectedUsers[socket.id]) {
-            connectedUsers[socket.id].name = newName;
-            io.emit('user list', Object.values(connectedUsers));
-            socket.emit('your info', connectedUsers[socket.id]);
+        if (rooms[roomId][socket.id]) {
+            rooms[roomId][socket.id].name = newName;
+            io.to(roomId).emit('user list', Object.values(rooms[roomId]));
+            socket.emit('your info', rooms[roomId][socket.id]);
         }
     });
 
-    // --- WebRTC Signaling ---
     socket.on('webrtc_offer', (data) => {
         io.to(data.target).emit('webrtc_offer', {
             sender: socket.id,
@@ -71,9 +100,13 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log(`Thiết bị ngắt kết nối: ${socket.id}`);
-        if (connectedUsers[socket.id]) {
-            delete connectedUsers[socket.id];
-            io.emit('user list', Object.values(connectedUsers));
+        if (rooms[roomId] && rooms[roomId][socket.id]) {
+            delete rooms[roomId][socket.id];
+            io.to(roomId).emit('user list', Object.values(rooms[roomId]));
+            
+            if (Object.keys(rooms[roomId]).length === 0) {
+                delete rooms[roomId];
+            }
         }
     });
 });

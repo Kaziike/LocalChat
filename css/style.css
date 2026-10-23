@@ -142,6 +142,7 @@ body {
     width: 48px;
     height: 48px;
 }
+
 .group-avatar {
     background-color: #dbeafe;
     color: var(--primary-color);
@@ -204,12 +205,30 @@ body {
     flex: 1;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    position: relative;
+    min-width: 0;
 }
 
 .my-name {
     font-weight: 600;
     font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    padding-right: 8px;
+}
+
+.my-info .icon-btn {
+    position: absolute;
+    right: 0;
+    background-color: #f8fafc;
+    box-shadow: -8px 0 8px 4px #f8fafc;
+}
+
+.my-info .icon-btn:hover {
+    background-color: var(--hover-bg);
+    box-shadow: -8px 0 8px 4px var(--hover-bg);
 }
 
 /* Chat Area */
@@ -261,6 +280,7 @@ body {
     padding: 4px 8px;
     margin-right: 8px;
 }
+
 .message-search-container input {
     border: none;
     background: transparent;
@@ -315,7 +335,7 @@ body {
 }
 
 .date-divider span {
-    background-color: rgba(0,0,0,0.05);
+    background-color: rgba(0, 0, 0, 0.05);
     padding: 4px 12px;
     border-radius: 12px;
     font-size: 12px;
@@ -362,12 +382,13 @@ body {
     background-color: var(--message-other);
     padding: 12px 16px;
     border-radius: 8px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     font-size: 14px;
     line-height: 1.5;
     position: relative;
     word-break: break-word;
 }
+
 .msg-bubble.highlighted {
     background-color: #fff3cd;
     border: 1px solid #ffeeba;
@@ -376,6 +397,7 @@ body {
 .message.mine .msg-bubble {
     background-color: var(--message-me);
 }
+
 .message.mine .msg-bubble.highlighted {
     background-color: #fff3cd;
 }
@@ -399,6 +421,7 @@ body {
     text-decoration: none;
     color: var(--text-main);
 }
+
 .message.mine .msg-file {
     background: #ffffff;
 }
@@ -412,10 +435,12 @@ body {
     display: flex;
     flex-direction: column;
 }
+
 .file-name {
     font-weight: 500;
     font-size: 14px;
 }
+
 .file-size {
     font-size: 12px;
     color: var(--text-secondary);
@@ -484,25 +509,29 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0,0,0,0.5);
+    background: rgba(0, 0, 0, 0.5);
     align-items: center;
     justify-content: center;
     z-index: 1000;
 }
+
 .modal.active {
     display: flex;
 }
+
 .modal-content {
     background: var(--white);
     padding: 24px;
     border-radius: 8px;
     width: 320px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
+
 .modal-content h3 {
     margin-bottom: 16px;
     font-size: 18px;
 }
+
 .modal-content input {
     width: 100%;
     padding: 10px;
@@ -512,11 +541,13 @@ body {
     font-size: 14px;
     font-family: inherit;
 }
+
 .modal-actions {
     display: flex;
     justify-content: flex-end;
     gap: 12px;
 }
+
 .btn {
     padding: 8px 16px;
     border: none;
@@ -525,10 +556,12 @@ body {
     font-weight: 500;
     font-family: inherit;
 }
+
 .btn-secondary {
     background: #e2e8f0;
     color: var(--text-main);
 }
+
 .btn-primary {
     background: var(--primary-color);
     color: var(--white);
@@ -543,6 +576,9 @@ body {
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
-@keyframes spin { 
-    to { transform: rotate(360deg); } 
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
