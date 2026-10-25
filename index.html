@@ -3,38 +3,75 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="description" content="Ứng dụng nhắn tin, truyền tập tin và gọi thoại/video P2P tốc độ cao qua mạng Wi-Fi nội bộ không cần Internet.">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Chat Nội Bộ Wi-Fi</title>
-    <link rel="stylesheet" href="css/style.css">
+    
+    <!-- Critical CSS: Đảm bảo giao diện luôn được định dạng chuẩn xác trên iOS Safari / WebKit -->
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            width: 100%; height: 100%; height: 100vh; height: 100dvh;
+            margin: 0; padding: 0; overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #EAEEF3; color: #081C36;
+            -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%;
+        }
+        .app-container {
+            display: flex; width: 100%; height: 100%; height: 100vh; height: 100dvh;
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden;
+        }
+        .modal, .incoming-call-modal, .image-modal { display: none !important; }
+        .modal.active, .incoming-call-modal.active, .image-modal.active { display: flex !important; }
+        .call-modal-overlay { display: none; }
+        @media (max-width: 900px) {
+            .app-container:not(.show-chat) .sidebar { display: flex !important; width: 100% !important; height: 100% !important; flex: 1 !important; }
+            .app-container:not(.show-chat) .chat-area { display: none !important; }
+            .app-container.show-chat .sidebar { display: none !important; }
+            .app-container.show-chat .chat-area { display: flex !important; width: 100% !important; height: 100% !important; flex: 1 !important; }
+        }
+    </style>
+
+    <link rel="stylesheet" type="text/css" href="/css/style.css?v=2.2.0">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 </head>
 
 <body>
-    <div class="app-container">
-        <!-- Sidebar: Chat List -->
-        <aside class="sidebar">
+    <div class="app-container" id="app-container">
+        <!-- Sidebar: Chat List (Phong cách Zalo) -->
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <h2>Tin nhắn</h2>
+                <div class="sidebar-title-row">
+                    <h2>Tin nhắn</h2>
+                    <div class="connection-status online" id="connection-status" title="Trạng thái kết nối">
+                        <span class="status-dot"></span>
+                        <span class="status-text" id="status-text">Đang kết nối...</span>
+                    </div>
+                </div>
             </div>
             <div class="search-bar">
                 <div class="search-input-container">
-                    <i class="ph ph-magnifying-glass"></i>
-                    <input type="text" id="user-search-input" placeholder="Tìm kiếm người dùng...">
+                    <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+                    <input type="text" id="user-search-input" placeholder="Tìm kiếm..." aria-label="Tìm kiếm người dùng">
+                    <button class="clear-input-btn" id="clear-user-search-btn" style="display: none;" aria-label="Xóa tìm kiếm"><i class="ph ph-x-circle"></i></button>
                 </div>
             </div>
-            <div class="chat-list" id="chat-list">
+            <div class="chat-list" id="chat-list" role="navigation" aria-label="Danh sách cuộc trò chuyện">
                 <!-- Group Chat Item -->
-                <div class="chat-item active" data-id="general" id="chat-general">
+                <div class="chat-item active" data-id="general" id="chat-general" onclick="switchChat('general')" tabindex="0" role="button" aria-label="Nhóm chung nội bộ">
                     <div class="avatar group-avatar">
-                        <i class="ph-fill ph-users-three"></i>
+                        <i class="ph-fill ph-users-three" aria-hidden="true"></i>
                     </div>
                     <div class="chat-info">
                         <div class="chat-name-row">
                             <span class="chat-name">Nhóm chung nội bộ</span>
-                            <span class="chat-time"></span>
+                            <span class="chat-time" id="general-time"></span>
                         </div>
                         <div class="chat-last-msg-row">
-                            <span class="chat-last-msg"></span>
+                            <span class="chat-last-msg" id="general-last-msg">Chưa có tin nhắn nào</span>
+                            <span class="unread-badge" id="unread-general" style="display: none;">0</span>
                         </div>
                     </div>
                 </div>
@@ -43,76 +80,162 @@
             <!-- My Profile area at bottom of sidebar for renaming -->
             <div class="my-profile-area">
                 <div class="avatar my-avatar">
-                    <i class="ph-fill ph-user"></i>
+                    <i class="ph-fill ph-user" aria-hidden="true"></i>
                 </div>
                 <div class="my-info">
-                    <span class="my-name" id="my-display-name">Đang tải...</span>
-                    <button class="icon-btn" id="rename-btn" title="Đổi tên"><i
-                            class="ph ph-pencil-simple"></i></button>
+                    <div class="my-name-wrap">
+                        <span class="my-name" id="my-display-name">Đang tải...</span>
+                        <span class="my-ip" id="my-ip-label"></span>
+                    </div>
+                    <button class="icon-btn" id="rename-btn" title="Đổi tên hiển thị" aria-label="Đổi tên hiển thị"><i
+                            class="ph ph-pencil-simple" aria-hidden="true"></i></button>
                 </div>
             </div>
         </aside>
 
         <!-- Khung Chat Chinh -->
-        <main class="chat-area">
+        <main class="chat-area" id="chat-area">
             <header class="chat-header">
                 <div class="chat-header-info">
+                    <button class="icon-btn mobile-back-btn" id="mobile-back-btn" title="Quay lại danh sách" aria-label="Quay lại danh sách"><i class="ph ph-arrow-left" aria-hidden="true"></i></button>
                     <div class="avatar" id="current-chat-avatar">
-                        <i class="ph-fill ph-users-three"></i>
+                        <i class="ph-fill ph-users-three" aria-hidden="true"></i>
                     </div>
                     <div class="chat-header-text">
                         <h3 id="current-chat-name">Nhóm chung nội bộ</h3>
+                        <span class="chat-header-subtitle" id="current-chat-subtitle">Đang tải...</span>
                     </div>
                 </div>
-                <div class="chat-header-actions">
+                <div class="chat-header-actions" id="chat-header-actions">
+                    <button class="icon-btn call-action-btn" id="voice-call-btn" title="Gọi thoại P2P" aria-label="Gọi thoại P2P" style="display: none;"><i class="ph-fill ph-phone" aria-hidden="true"></i></button>
+                    <button class="icon-btn call-action-btn" id="video-call-btn" title="Gọi video P2P" aria-label="Gọi video P2P" style="display: none;"><i class="ph-fill ph-video-camera" aria-hidden="true"></i></button>
                     <div class="message-search-container" id="message-search-container" style="display: none;">
-                        <input type="text" id="message-search-input" placeholder="Tìm tin nhắn...">
-                        <button class="icon-btn" id="close-msg-search-btn"><i class="ph ph-x"></i></button>
+                        <input type="text" id="message-search-input" placeholder="Tìm..." aria-label="Tìm tin nhắn trong đoạn chat">
+                        <button class="icon-btn" id="close-msg-search-btn" title="Đóng tìm kiếm" aria-label="Đóng tìm kiếm"><i class="ph ph-x" aria-hidden="true"></i></button>
                     </div>
-                    <button class="icon-btn" id="toggle-msg-search-btn"><i class="ph ph-magnifying-glass"></i></button>
+                    <button class="icon-btn" id="toggle-msg-search-btn" title="Tìm tin nhắn" aria-label="Tìm kiếm tin nhắn"><i class="ph ph-magnifying-glass" aria-hidden="true"></i></button>
                 </div>
             </header>
 
             <div class="pinned-message" id="pinned-message-container">
-                <div class="pinned-icon"><i class="ph-fill ph-push-pin"></i></div>
-                <div class="pinned-content">
+                <div class="pinned-icon"><i class="ph-fill ph-push-pin" aria-hidden="true"></i></div>
+                <div class="pinned-content" id="pinned-content">
                     <div class="pinned-title">Tin nhắn ghim</div>
-                    <div class="pinned-text">Hệ thống: Kênh trao đổi nội bộ qua Wi-Fi</div>
+                    <div class="pinned-text" id="pinned-text">Hệ thống: Kênh trao đổi nội bộ qua Wi-Fi (P2P tốc độ cao, không lưu đám mây)</div>
                 </div>
-                <button class="icon-btn"><i class="ph ph-caret-down"></i></button>
+                <button class="icon-btn" id="toggle-pinned-btn" title="Thu gọn / Mở rộng" aria-label="Thu gọn hoặc mở rộng tin nhắn ghim"><i class="ph ph-caret-up" id="pinned-caret-icon" aria-hidden="true"></i></button>
             </div>
 
-            <div class="messages-container" id="messages-container">
+            <!-- Transfer Progress Indicator -->
+            <div class="transfer-progress-card" id="transfer-progress-card" style="display: none;">
+                <div class="transfer-info">
+                    <i class="ph-fill ph-arrows-clockwise transfer-icon rotating" aria-hidden="true"></i>
+                    <div class="transfer-details">
+                        <span class="transfer-filename" id="transfer-filename">Đang truyền file...</span>
+                        <span class="transfer-stats" id="transfer-stats">0%</span>
+                    </div>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar-fill" id="progress-bar-fill" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <div class="messages-container" id="messages-container" role="log" aria-live="polite">
                 <div class="date-divider"><span>Hôm nay</span></div>
                 <!-- Messages go here -->
             </div>
 
             <footer class="chat-input-area">
                 <div class="input-toolbar">
-                    <button class="icon-btn" id="attach-btn" title="Gửi file"><i class="ph ph-paperclip"></i></button>
+                    <button class="icon-btn" id="attach-btn" title="Gửi tập tin hoặc hình ảnh" aria-label="Gửi tập tin hoặc hình ảnh"><i class="ph ph-paperclip" aria-hidden="true"></i></button>
+                    <span class="toolbar-hint">Kéo thả file hoặc dán ảnh (Ctrl+V) vào đây</span>
                     <div class="toolbar-spacer"></div>
                     <input type="file" id="file-input" style="display: none;">
                 </div>
                 <form id="chat-form" class="input-form">
                     <div class="input-wrapper">
-                        <input type="text" id="message-input" placeholder="Nhập tin nhắn..." autocomplete="off">
+                        <input type="text" id="message-input" placeholder="Tin nhắn..." autocomplete="off" aria-label="Nội dung tin nhắn">
                     </div>
-                    <button type="submit" class="send-btn" id="send-btn"><i
-                            class="ph-fill ph-paper-plane-right"></i></button>
+                    <button type="submit" class="send-btn" id="send-btn" title="Gửi" aria-label="Gửi tin nhắn"><i
+                            class="ph-fill ph-paper-plane-right" aria-hidden="true"></i></button>
                 </form>
             </footer>
         </main>
     </div>
 
     <!-- Rename Modal -->
-    <div id="rename-modal" class="modal">
+    <div id="rename-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="rename-modal-title">
         <div class="modal-content">
-            <h3>Đổi tên hiển thị</h3>
-            <input type="text" id="new-name-input" placeholder="Nhập tên mới">
-            <div class="modal-actions">
-                <button id="cancel-rename-btn" class="btn btn-secondary">Hủy</button>
-                <button id="save-rename-btn" class="btn btn-primary">Lưu</button>
+            <h3 id="rename-modal-title">Đổi tên hiển thị</h3>
+            <form id="rename-form">
+                <input type="text" id="new-name-input" placeholder="Nhập tên mới (tối đa 50 ký tự)" maxlength="50" autocomplete="off" required>
+                <div class="modal-actions">
+                    <button type="button" id="cancel-rename-btn" class="btn btn-secondary">Hủy</button>
+                    <button type="submit" id="save-rename-btn" class="btn btn-primary">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Image Lightbox Modal -->
+    <div id="image-modal" class="modal image-modal" role="dialog" aria-modal="true" aria-label="Xem ảnh phóng to">
+        <div class="image-modal-content">
+            <button class="icon-btn image-modal-close" id="image-modal-close" aria-label="Đóng ảnh phóng to"><i class="ph ph-x" aria-hidden="true"></i></button>
+            <img id="image-modal-img" src="" alt="Ảnh phóng to">
+            <div class="image-modal-bar">
+                <span class="image-modal-title" id="image-modal-title"></span>
+                <a id="image-modal-download" href="" download="" class="btn btn-primary image-modal-btn">
+                    <i class="ph ph-download-simple" aria-hidden="true"></i> Tải ảnh
+                </a>
             </div>
+        </div>
+    </div>
+
+    <!-- Incoming Call Modal -->
+    <div id="incoming-call-modal" class="modal incoming-call-modal" role="dialog" aria-modal="true" aria-labelledby="caller-name">
+        <div class="modal-content call-box">
+            <div class="call-avatar-pulse">
+                <div class="avatar large-call-avatar"><i class="ph-fill ph-user" aria-hidden="true"></i></div>
+            </div>
+            <h3 id="caller-name">Người dùng</h3>
+            <p id="call-type-label">Đang gọi thoại cho bạn qua Wi-Fi...</p>
+            <div class="call-actions-row">
+                <button type="button" id="decline-call-btn" class="call-btn btn-decline" title="Từ chối" aria-label="Từ chối cuộc gọi">
+                    <i class="ph-fill ph-phone-disconnect" aria-hidden="true"></i>
+                </button>
+                <button type="button" id="accept-call-btn" class="call-btn btn-accept" title="Trả lời" aria-label="Trả lời cuộc gọi">
+                    <i class="ph-fill ph-phone-call" aria-hidden="true"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Call Screen Overlay -->
+    <div id="active-call-modal" class="call-modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-label="Giao diện cuộc gọi">
+        <div class="call-header-bar">
+            <div class="call-peer-info">
+                <span id="call-peer-name" class="call-peer-title">Cuộc gọi P2P</span>
+                <span id="call-timer" class="call-timer">Đang kết nối...</span>
+            </div>
+        </div>
+        <div class="call-video-grid" id="call-video-grid">
+            <video id="remote-video" autoplay playsinline class="remote-video"></video>
+            <div id="remote-avatar-fallback" class="remote-avatar-fallback">
+                <div class="avatar xlarge-call-avatar"><i class="ph-fill ph-user" aria-hidden="true"></i></div>
+                <span id="call-status-sub" class="call-status-sub">Đang gọi nội bộ...</span>
+            </div>
+            <video id="local-video" autoplay playsinline muted class="local-video"></video>
+        </div>
+        <div class="call-controls-bar">
+            <button type="button" class="call-ctrl-btn" id="toggle-mic-btn" title="Bật/Tắt Mic" aria-label="Bật/Tắt Mic">
+                <i class="ph-fill ph-microphone" id="mic-icon" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="call-ctrl-btn" id="toggle-cam-btn" title="Bật/Tắt Camera" aria-label="Bật/Tắt Camera">
+                <i class="ph-fill ph-video-camera" id="cam-icon" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="call-ctrl-btn btn-end-call" id="end-call-btn" title="Kết thúc cuộc gọi" aria-label="Kết thúc cuộc gọi">
+                <i class="ph-fill ph-phone-disconnect" aria-hidden="true"></i>
+            </button>
         </div>
     </div>
 
