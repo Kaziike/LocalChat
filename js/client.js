@@ -1,7 +1,5 @@
-const socket = io();
-
 // =========================================================
-// DEVICE IDENTITY (Cố định danh tính thiết bị qua mọi phiên)
+// DEVICE IDENTITY & ROOM CODE (Định danh bền vững & Mã phòng)
 // =========================================================
 function getOrCreateDeviceId() {
     let id = localStorage.getItem('localchat_device_id');
@@ -11,7 +9,45 @@ function getOrCreateDeviceId() {
     }
     return id;
 }
+
+function normalizeRoomCode(code) {
+    if (typeof code !== 'string') return '';
+    const cleaned = code.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').substring(0, 32);
+    return cleaned.length >= 2 ? cleaned : '';
+}
+
+function getInitialRoomCode() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const fromUrl = normalizeRoomCode(params.get('room') || '');
+        if (fromUrl) {
+            localStorage.setItem('localchat_room_code', fromUrl);
+            return fromUrl;
+        }
+        return normalizeRoomCode(localStorage.getItem('localchat_room_code') || '');
+    } catch (e) {
+        return '';
+    }
+}
+
 const myDeviceId = getOrCreateDeviceId();
+let currentRoomCode = getInitialRoomCode();
+
+function buildSocketAuth() {
+    return {
+        deviceId: myDeviceId,
+        name: localStorage.getItem('localchat_display_name') || '',
+        roomCode: currentRoomCode
+    };
+}
+
+const socket = io({
+    auth: buildSocketAuth(),
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000
+});
 
 // UI Elements
 const appContainer = document.getElementById('app-container');
@@ -33,9 +69,27 @@ const pinnedCaretIcon = document.getElementById('pinned-caret-icon');
 const voiceCallBtn = document.getElementById('voice-call-btn');
 const videoCallBtn = document.getElementById('video-call-btn');
 
-// Connection Status UI
+// Connection Status & Room UI
 const connectionStatus = document.getElementById('connection-status');
 const statusText = document.getElementById('status-text');
+const roomBanner = document.getElementById('room-banner');
+const roomBannerIcon = document.getElementById('room-banner-icon');
+const roomModeLabel = document.getElementById('room-mode-label');
+const roomIdLabel = document.getElementById('room-id-label');
+const openRoomModalBtn = document.getElementById('open-room-modal-btn');
+
+// Room Modal UI
+const roomModal = document.getElementById('room-modal');
+const closeRoomModalBtn = document.getElementById('close-room-modal-btn');
+const cancelRoomBtn = document.getElementById('cancel-room-btn');
+const roomShareCard = document.getElementById('room-share-card');
+const roomQrWrap = document.getElementById('room-qr-wrap');
+const currentRoomCodeDisplay = document.getElementById('current-room-code-display');
+const copyRoomLinkBtn = document.getElementById('copy-room-link-btn');
+const autoRoomBtn = document.getElementById('auto-room-btn');
+const roomJoinForm = document.getElementById('room-join-form');
+const roomCodeInput = document.getElementById('room-code-input');
+const randomRoomBtn = document.getElementById('random-room-btn');
 
 // Transfer Progress UI
 const transferProgressCard = document.getElementById('transfer-progress-card');
@@ -104,7 +158,7 @@ const restoredFileUrls = {}; // fileId -> objectUrl
 // --- WebRTC State ---
 const peerConnections = {}; // targetId -> RTCPeerConnection (DataChannel)
 const dataChannels = {};    // targetId -> RTCDataChannel
-const rtcConfig = {
+let rtcConfig = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
@@ -112,6 +166,20 @@ const rtcConfig = {
         { urls: 'stun:stun.cloudflare.com:3478' }
     ]
 };
+
+async function loadIceConfig() {
+    try {
+        const res = await fetch('/api/ice-config', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+            rtcConfig = { iceServers: data.iceServers };
+        }
+    } catch (e) {
+        // Dùng cấu hình STUN mặc định nếu không lấy được từ API
+    }
+}
+loadIceConfig();
 
 // Call State
 let currentCall = null; // { targetId, isVideo, pc, localStream, timerInterval, startTime, isMuted, isCamOff }
@@ -378,6 +446,8 @@ function savePersistedHistory() {
                     isFile: m.isFile,
                     fileName: m.fileName,
                     fileSize: m.fileSize,
+                    mimeType: m.mimeType,
+                    relayFileUrl: m.relayFileUrl,
                     timestamp: m.timestamp
                 };
             });
@@ -391,26 +461,167 @@ function savePersistedHistory() {
 loadPersistedHistory();
 
 // =========================================================
-// SOCKET EVENTS (Signaling & Lifecycle)
+// SOCKET EVENTS, ROOM MANAGEMENT & MOBILE RECONNECT
 // =========================================================
+function updateConnectionStatus(isOnline) {
+    if (connectionStatus) {
+        connectionStatus.className = isOnline ? 'connection-status online' : 'connection-status offline';
+    }
+    if (statusText) {
+        statusText.textContent = isOnline ? 'Trực tuyến' : 'Mất kết nối';
+    }
+}
+
+function updateRoomBanner(info) {
+    if (!info || !roomBanner) return;
+    const isCustom = info.roomMode === 'custom' && info.roomCode;
+    roomBanner.classList.toggle('custom-mode', !!isCustom);
+    if (roomBannerIcon) {
+        roomBannerIcon.className = isCustom ? 'ph-fill ph-lock-key' : 'ph-fill ph-broadcast';
+    }
+    if (roomModeLabel) {
+        roomModeLabel.textContent = isCustom ? 'Phòng riêng (mọi tầng mạng)' : 'Tự động theo mạng';
+    }
+    if (roomIdLabel) {
+        roomIdLabel.textContent = info.roomDisplayName || info.roomId || 'Đang dò mạng...';
+    }
+}
+
+function syncRoomUrl(code) {
+    try {
+        const url = new URL(window.location.href);
+        if (code) {
+            url.searchParams.set('room', code);
+            localStorage.setItem('localchat_room_code', code);
+        } else {
+            url.searchParams.delete('room');
+            localStorage.removeItem('localchat_room_code');
+        }
+        window.history.replaceState({}, '', url.toString());
+    } catch (e) {}
+}
+
+function buildRoomInviteUrl(code) {
+    const url = new URL(window.location.origin + window.location.pathname);
+    if (code) {
+        url.searchParams.set('room', code);
+    }
+    return url.toString();
+}
+
+function renderRoomModalUI() {
+    const activeCode = (myInfo && myInfo.roomMode === 'custom' && myInfo.roomCode) || currentRoomCode;
+    if (activeCode) {
+        roomShareCard.style.display = 'block';
+        currentRoomCodeDisplay.textContent = activeCode;
+        const inviteUrl = buildRoomInviteUrl(activeCode);
+        if (typeof window.qrcode === 'function') {
+            try {
+                const qr = window.qrcode(0, 'M');
+                qr.addData(inviteUrl);
+                qr.make();
+                roomQrWrap.innerHTML = qr.createSvgTag({ scalable: true });
+            } catch (e) {
+                roomQrWrap.innerHTML = '';
+            }
+        } else {
+            roomQrWrap.innerHTML = '';
+        }
+    } else {
+        roomShareCard.style.display = 'none';
+        roomQrWrap.innerHTML = '';
+    }
+}
+
+function cleanupPeerConnections() {
+    Object.keys(peerConnections).forEach(id => {
+        try { peerConnections[id].close(); } catch (e) {}
+        delete peerConnections[id];
+    });
+    Object.keys(dataChannels).forEach(id => {
+        try { dataChannels[id].close(); } catch (e) {}
+        delete dataChannels[id];
+    });
+    Object.keys(receivingFiles).forEach(id => {
+        delete receivingFiles[id];
+    });
+}
+
+function switchRoom(nextCode) {
+    const normalized = normalizeRoomCode(nextCode || '');
+    const roomChanged = normalized !== currentRoomCode;
+    currentRoomCode = normalized;
+    syncRoomUrl(currentRoomCode);
+    socket.auth = buildSocketAuth();
+
+    if (currentCall) {
+        endCurrentCall();
+    }
+    cleanupPeerConnections();
+
+    if (roomChanged) {
+        currentActiveChat = 'general';
+        if (appContainer) {
+            appContainer.classList.remove('show-chat');
+        }
+    }
+
+    socket.emit('switch_room', { roomCode: currentRoomCode }, (res) => {
+        if (res && res.ok) {
+            renderRoomModalUI();
+        }
+    });
+}
+
+// Kiểm tra ngay khi khởi động
+if (socket.connected) {
+    updateConnectionStatus(true);
+}
+
 socket.on('connect', () => {
-    connectionStatus.className = 'connection-status online';
-    statusText.textContent = 'Trực tuyến';
+    socket.auth = buildSocketAuth();
+    updateConnectionStatus(true);
 });
 
 socket.on('disconnect', () => {
-    connectionStatus.className = 'connection-status offline';
-    statusText.textContent = 'Mất kết nối';
+    updateConnectionStatus(false);
     currentChatSubtitle.textContent = 'Mất kết nối';
     if (currentCall) {
         endCurrentCall();
     }
 });
 
+// Tự động kết nối lại ngay khi quay lại tab trên iPhone / Android hoặc khi có mạng trở lại
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !socket.connected) {
+        socket.auth = buildSocketAuth();
+        socket.connect();
+    }
+});
+
+window.addEventListener('online', () => {
+    if (!socket.connected) {
+        socket.auth = buildSocketAuth();
+        socket.connect();
+    }
+});
+
 socket.on('your info', (info) => {
+    updateConnectionStatus(true);
     myInfo = info;
     myDisplayName.textContent = info.name;
     myIpLabel.textContent = info.ip ? `IP: ${info.ip}` : '';
+
+    if (info.roomMode === 'custom' && info.roomCode) {
+        currentRoomCode = info.roomCode;
+    } else {
+        currentRoomCode = '';
+    }
+    syncRoomUrl(currentRoomCode);
+    updateRoomBanner(info);
+    if (roomModal && roomModal.classList.contains('active')) {
+        renderRoomModalUI();
+    }
 
     const savedName = localStorage.getItem('localchat_display_name');
     if (savedName && savedName !== info.name) {
@@ -425,6 +636,17 @@ socket.on('your info', (info) => {
 
 socket.on('user list', (userList) => {
     users = userList;
+
+    // Dọn kết nối P2P của thiết bị đã rời phòng để tái thiết lập sạch nếu kết nối lại
+    const activeIds = new Set(users.map(u => u.id));
+    Object.keys(peerConnections).forEach(pid => {
+        if (!activeIds.has(pid)) {
+            try { peerConnections[pid].close(); } catch (e) {}
+            delete peerConnections[pid];
+            delete dataChannels[pid];
+        }
+    });
+
     updateSidebar();
     updateChatHeader();
 
@@ -623,6 +845,35 @@ function setupDataChannel(dc, targetId) {
     };
 }
 
+const fetchingRelayIds = new Set();
+const MAX_AUTO_CACHE_RELAY_BYTES = 20 * 1024 * 1024; // Tự tải lưu IndexedDB với tệp <= 20MB
+
+async function cacheRelayFileToIndexedDB(msg) {
+    if (!msg || !msg.id || !msg.relayFileUrl) return;
+    if (restoredFileUrls[msg.id] || fetchingRelayIds.has(msg.id)) return;
+    if (msg.fileSize && msg.fileSize > MAX_AUTO_CACHE_RELAY_BYTES) return;
+
+    fetchingRelayIds.add(msg.id);
+    try {
+        const res = await fetch(msg.relayFileUrl, { cache: 'no-store' });
+        if (!res.ok) return;
+        const rawBlob = await res.blob();
+        const blob = msg.mimeType ? new Blob([rawBlob], { type: msg.mimeType }) : rawBlob;
+        const objectUrl = URL.createObjectURL(blob);
+        restoredFileUrls[msg.id] = objectUrl;
+        saveFileToIndexedDB(msg.id, msg.fileName, msg.fileSize || blob.size, blob, msg.timestamp);
+
+        const targetChat = msg.to === 'general' ? 'general' : (msg.from && msg.from.id);
+        if (currentActiveChat === targetChat) {
+            renderChatHistory();
+        }
+    } catch (e) {
+        console.warn('Không thể tải trước tệp từ Relay:', e);
+    } finally {
+        fetchingRelayIds.delete(msg.id);
+    }
+}
+
 function handleIncomingMessage(msg) {
     if (!msg) return;
 
@@ -654,6 +905,10 @@ function handleIncomingMessage(msg) {
     }
     chatHistory[targetChat].push(msg);
     savePersistedHistory();
+
+    if (msg.isFile && msg.relayFileUrl) {
+        cacheRelayFileToIndexedDB(msg);
+    }
 
     if (currentActiveChat === targetChat) {
         renderMessage(msg);
@@ -753,16 +1008,125 @@ function hideTransferProgress() {
     progressBarFill.style.width = '0%';
 }
 
-async function sendFile(file, toChat) {
-    if (!file) return;
+function appendSentFileMessage(file, fileId, toChat, timestamp, relayFileUrl = '') {
+    const fileUrl = URL.createObjectURL(file);
+    saveFileToIndexedDB(fileId, file.name, file.size, file, timestamp);
+    restoredFileUrls[fileId] = fileUrl;
 
-    if (toChat !== 'general' && (!dataChannels[toChat] || dataChannels[toChat].readyState !== 'open')) {
-        alert('Đang chờ kết nối P2P tới người nhận. Vui lòng thử lại sau 2 giây.');
+    const msg = {
+        id: fileId,
+        senderDeviceId: myDeviceId,
+        from: myInfo,
+        to: toChat,
+        content: '',
+        isFile: true,
+        fileName: file.name,
+        fileSize: file.size,
+        fileUrl: fileUrl,
+        relayFileUrl: relayFileUrl || undefined,
+        timestamp: timestamp,
+        isMine: true
+    };
+
+    if (!chatHistory[toChat]) chatHistory[toChat] = [];
+    chatHistory[toChat].push(msg);
+    savePersistedHistory();
+
+    if (currentActiveChat === toChat) {
+        renderMessage(msg);
+        scrollToBottom();
+    }
+    updateSidebar();
+}
+
+function canSendFileDirectlyViaP2P(toChat) {
+    if (toChat === 'general') {
+        const otherUsers = users.filter(u => myInfo && u.id !== myInfo.id);
+        if (otherUsers.length === 0) return true; // Chỉ lưu cục bộ nếu chưa có ai khác
+        return otherUsers.every(u => dataChannels[u.id] && dataChannels[u.id].readyState === 'open');
+    }
+    return !!(dataChannels[toChat] && dataChannels[toChat].readyState === 'open');
+}
+
+async function sendFileViaServerRelay(file, toChat) {
+    if (!socket.connected || !myInfo || !myInfo.roomId) {
+        alert('Chưa kết nối tới máy chủ để truyền tập tin. Vui lòng thử lại.');
         return;
     }
 
     const timestamp = new Date().toISOString();
     const fileId = generateId();
+    const transferId = `tr_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
+    const CHUNK_SIZE = 1536 * 1024; // 1.5MB mỗi mảnh (an toàn dưới ngưỡng 100MB Cloudflare)
+    const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+
+    seenMessageIds.add(fileId);
+    showTransferProgress(`Đang gửi (Relay): ${file.name}`, 0);
+
+    try {
+        let lastResult = null;
+        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+            const start = chunkIndex * CHUNK_SIZE;
+            const end = Math.min(file.size, start + CHUNK_SIZE);
+            const slice = file.slice(start, end);
+
+            const formData = new FormData();
+            formData.append('transferId', transferId);
+            formData.append('chunkIndex', String(chunkIndex));
+            formData.append('totalChunks', String(totalChunks));
+            formData.append('fileName', file.name);
+            formData.append('fileSize', String(file.size));
+            formData.append('mimeType', file.type || 'application/octet-stream');
+            formData.append('roomId', myInfo.roomId);
+            formData.append('senderId', myInfo.id);
+            formData.append('targetId', toChat);
+            formData.append('messageId', fileId);
+            formData.append('timestamp', timestamp);
+            formData.append('chunk', slice, 'chunk.bin');
+
+            const response = await fetch('/api/relay/upload-chunk', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error(`Upload chunk thất bại (${response.status})`);
+            }
+            lastResult = await response.json();
+            if (!lastResult || !lastResult.ok) {
+                throw new Error((lastResult && lastResult.error) || 'Lỗi upload chunk');
+            }
+
+            const pct = Math.min(100, Math.round(((chunkIndex + 1) / totalChunks) * 100));
+            showTransferProgress(
+                `Đang gửi (Relay): ${file.name}`,
+                pct,
+                `${formatFileSize(end)} / ${formatFileSize(file.size)}`
+            );
+        }
+
+        showTransferProgress(`Đã gửi: ${file.name}`, 100);
+        setTimeout(hideTransferProgress, 1800);
+        appendSentFileMessage(file, fileId, toChat, timestamp, lastResult && lastResult.fileUrl);
+    } catch (e) {
+        console.error('Lỗi gửi file qua Relay:', e);
+        alert('Không thể truyền tập tin qua máy chủ. Vui lòng kiểm tra kết nối mạng.');
+        hideTransferProgress();
+    }
+}
+
+async function sendFile(file, toChat) {
+    if (!file) return;
+
+    // Nếu WebRTC DataChannel bị chặn (AP Isolation / tường lửa trường), tự động chuyển sang Relay qua Server
+    if (!canSendFileDirectlyViaP2P(toChat)) {
+        await sendFileViaServerRelay(file, toChat);
+        return;
+    }
+
+    const timestamp = new Date().toISOString();
+    const fileId = generateId();
+    seenMessageIds.add(fileId);
 
     showTransferProgress(`Đang gửi: ${file.name}`, 0);
 
@@ -799,38 +1163,11 @@ async function sendFile(file, toChat) {
 
         showTransferProgress(`Đã gửi: ${file.name}`, 100);
         setTimeout(hideTransferProgress, 1800);
-
-        const fileUrl = URL.createObjectURL(file);
-        saveFileToIndexedDB(fileId, file.name, file.size, file, timestamp);
-        restoredFileUrls[fileId] = fileUrl;
-
-        const msg = {
-            id: fileId,
-            senderDeviceId: myDeviceId,
-            from: myInfo,
-            to: toChat,
-            content: '',
-            isFile: true,
-            fileName: file.name,
-            fileSize: file.size,
-            fileUrl: fileUrl,
-            timestamp: timestamp,
-            isMine: true
-        };
-
-        if (!chatHistory[toChat]) chatHistory[toChat] = [];
-        chatHistory[toChat].push(msg);
-        savePersistedHistory();
-
-        if (currentActiveChat === toChat) {
-            renderMessage(msg);
-            scrollToBottom();
-        }
-        updateSidebar();
+        appendSentFileMessage(file, fileId, toChat, timestamp);
     } catch (e) {
-        console.error('Lỗi gửi file:', e);
-        alert('Có lỗi xảy ra khi truyền file.');
+        console.error('Lỗi gửi file P2P, chuyển sang Relay:', e);
         hideTransferProgress();
+        await sendFileViaServerRelay(file, toChat);
     }
 }
 
@@ -1334,14 +1671,15 @@ function renderMessage(msg, isHighlighted = false) {
         const formattedSize = msg.fileSize ? formatFileSize(msg.fileSize) : 'Tải xuống';
         const isImg = isImageFile(msg.fileName);
 
-        const validFileUrl = msg.fileUrl || restoredFileUrls[msg.id];
+        const localBlobUrl = msg.fileUrl || restoredFileUrls[msg.id];
+        const downloadUrl = localBlobUrl || msg.relayFileUrl;
 
-        if (isImg && validFileUrl) {
+        if (isImg && localBlobUrl) {
             contentHtml = `
-                <div class="msg-image-wrap" onclick="openImageModal('${escapeHtml(validFileUrl)}', '${safeFileName}')">
-                    <img src="${escapeHtml(validFileUrl)}" alt="${safeFileName}" class="msg-image-preview">
+                <div class="msg-image-wrap" onclick="openImageModal('${escapeHtml(localBlobUrl)}', '${safeFileName}')">
+                    <img src="${escapeHtml(localBlobUrl)}" alt="${safeFileName}" class="msg-image-preview">
                 </div>
-                <a href="${escapeHtml(validFileUrl)}" target="_blank" download="${safeFileName}" class="msg-file">
+                <a href="${escapeHtml(localBlobUrl)}" target="_blank" download="${safeFileName}" class="msg-file">
                     <i class="ph-fill ph-file-image"></i>
                     <div class="file-info">
                         <span class="file-name">${safeFileName}</span>
@@ -1349,13 +1687,16 @@ function renderMessage(msg, isHighlighted = false) {
                     </div>
                 </a>
             `;
-        } else if (validFileUrl) {
+        } else if (downloadUrl) {
+            const subLabel = !localBlobUrl && msg.relayFileUrl
+                ? `${formattedSize} • Tải từ Relay`
+                : formattedSize;
             contentHtml = `
-                <a href="${escapeHtml(validFileUrl)}" target="_blank" download="${safeFileName}" class="msg-file">
-                    <i class="ph-fill ph-file-doc"></i>
+                <a href="${escapeHtml(downloadUrl)}" target="_blank" download="${safeFileName}" class="msg-file">
+                    <i class="ph-fill ${isImg ? 'ph-file-image' : 'ph-file-doc'}"></i>
                     <div class="file-info">
                         <span class="file-name">${safeFileName}</span>
-                        <span class="file-size">${formattedSize}</span>
+                        <span class="file-size">${subLabel}</span>
                     </div>
                 </a>
             `;
@@ -1561,11 +1902,101 @@ renameForm.addEventListener('submit', (e) => {
     renameModal.classList.remove('active');
 });
 
+// Quản lý phòng & QR mời bạn (Hỗ trợ mạng trường nhiều tầng / Multi-WAN)
+function openRoomModal() {
+    renderRoomModalUI();
+    roomCodeInput.value = currentRoomCode || '';
+    roomModal.classList.add('active');
+}
+
+function closeRoomModal() {
+    roomModal.classList.remove('active');
+}
+
+if (openRoomModalBtn) {
+    openRoomModalBtn.addEventListener('click', openRoomModal);
+}
+if (closeRoomModalBtn) {
+    closeRoomModalBtn.addEventListener('click', closeRoomModal);
+}
+if (cancelRoomBtn) {
+    cancelRoomBtn.addEventListener('click', closeRoomModal);
+}
+if (roomModal) {
+    roomModal.addEventListener('click', (e) => {
+        if (e.target === roomModal) {
+            closeRoomModal();
+        }
+    });
+}
+
+if (randomRoomBtn) {
+    randomRoomBtn.addEventListener('click', () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = '';
+        for (let i = 0; i < 6; i++) {
+            code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        roomCodeInput.value = code;
+        switchRoom(code);
+    });
+}
+
+if (autoRoomBtn) {
+    autoRoomBtn.addEventListener('click', () => {
+        roomCodeInput.value = '';
+        switchRoom('');
+        closeRoomModal();
+    });
+}
+
+if (copyRoomLinkBtn) {
+    copyRoomLinkBtn.addEventListener('click', async () => {
+        const activeCode = (myInfo && myInfo.roomMode === 'custom' && myInfo.roomCode) || currentRoomCode;
+        if (!activeCode) return;
+        const inviteUrl = buildRoomInviteUrl(activeCode);
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(inviteUrl);
+            } else {
+                const tempInput = document.createElement('input');
+                tempInput.value = inviteUrl;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+            }
+            const originalHtml = copyRoomLinkBtn.innerHTML;
+            copyRoomLinkBtn.innerHTML = '<i class="ph ph-check"></i> Đã sao chép!';
+            setTimeout(() => {
+                copyRoomLinkBtn.innerHTML = originalHtml;
+            }, 1800);
+        } catch (e) {
+            alert(`Link mời vào phòng: ${inviteUrl}`);
+        }
+    });
+}
+
+if (roomJoinForm) {
+    roomJoinForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const rawCode = roomCodeInput.value;
+        const normalized = normalizeRoomCode(rawCode);
+        if (!normalized) {
+            alert('Mã phòng cần ít nhất 2 ký tự (chữ cái, số, - hoặc _).');
+            return;
+        }
+        switchRoom(normalized);
+        closeRoomModal();
+    });
+}
+
 // Phím ESC
 window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         renameModal.classList.remove('active');
         imageModal.classList.remove('active');
+        closeRoomModal();
         if (messageSearchContainer.style.display !== 'none') {
             closeMsgSearchBtn.click();
         }

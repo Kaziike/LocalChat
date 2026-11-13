@@ -34,8 +34,9 @@
         }
     </style>
 
-    <link rel="stylesheet" type="text/css" href="/css/style.css?v=2.2.0">
+    <link rel="stylesheet" type="text/css" href="/css/style.css?v=2.3.0">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 </head>
 
 <body>
@@ -48,6 +49,20 @@
                     <div class="connection-status online" id="connection-status" title="Trạng thái kết nối">
                         <span class="status-dot"></span>
                         <span class="status-text" id="status-text">Đang kết nối...</span>
+                    </div>
+                </div>
+                <div class="room-banner" id="room-banner">
+                    <div class="room-banner-info">
+                        <i class="ph-fill ph-broadcast" id="room-banner-icon" aria-hidden="true"></i>
+                        <div class="room-banner-text">
+                            <span class="room-banner-label" id="room-mode-label">Tự động theo mạng</span>
+                            <span class="room-banner-id" id="room-id-label">Đang dò mạng...</span>
+                        </div>
+                    </div>
+                    <div class="room-banner-actions">
+                        <button type="button" class="icon-btn room-action-btn" id="open-room-modal-btn" title="Mã phòng / QR mời bạn (dùng cho mạng trường)" aria-label="Quản lý phòng và mã QR">
+                            <i class="ph ph-qr-code" aria-hidden="true"></i>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -163,6 +178,51 @@
         </main>
     </div>
 
+    <!-- Room Management & QR Invite Modal -->
+    <div id="room-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="room-modal-title">
+        <div class="modal-content room-modal-content">
+            <div class="modal-header-row">
+                <h3 id="room-modal-title">Phòng kết nối</h3>
+                <button type="button" class="icon-btn" id="close-room-modal-btn" aria-label="Đóng hộp thoại phòng">
+                    <i class="ph ph-x" aria-hidden="true"></i>
+                </button>
+            </div>
+            <p class="room-modal-desc" id="room-modal-desc">
+                Mạng trường / nhiều tầng IP khác nhau? Tạo chung một mã phòng hoặc quét QR để vào cùng nhóm ngay.
+            </p>
+
+            <div class="room-share-card" id="room-share-card" style="display: none;">
+                <div class="room-qr-wrap" id="room-qr-wrap"></div>
+                <div class="room-code-badge-row">
+                    <span class="room-code-caption">Mã phòng hiện tại:</span>
+                    <strong class="room-code-value" id="current-room-code-display"></strong>
+                </div>
+                <div class="room-share-actions">
+                    <button type="button" class="btn btn-secondary room-copy-btn" id="copy-room-link-btn">
+                        <i class="ph ph-link" aria-hidden="true"></i> Sao chép link mời
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="auto-room-btn" title="Quay lại tự động gom phòng theo mạng">
+                        <i class="ph ph-wifi-high" aria-hidden="true"></i> Tự động
+                    </button>
+                </div>
+            </div>
+
+            <form id="room-join-form" class="room-join-form">
+                <label for="room-code-input" class="room-input-label">Nhập hoặc tạo mã phòng riêng</label>
+                <div class="room-input-row">
+                    <input type="text" id="room-code-input" placeholder="VD: CNTT-K24" maxlength="32" autocomplete="off">
+                    <button type="button" class="btn btn-secondary" id="random-room-btn" title="Tạo mã ngẫu nhiên">
+                        <i class="ph ph-shuffle" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="cancel-room-btn" class="btn btn-secondary">Đóng</button>
+                    <button type="submit" id="join-room-btn" class="btn btn-primary">Vào phòng</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Rename Modal -->
     <div id="rename-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="rename-modal-title">
         <div class="modal-content">
@@ -240,7 +300,7 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="js/client.js"></script>
+    <script src="/js/client.js?v=2.3.0"></script>
 </body>
 
 </html>

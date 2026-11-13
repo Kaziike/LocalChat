@@ -1,6 +1,15 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { getDeviceIP, getRoomId, getLocalIPs, rooms } = require('../js/server.js');
+const {
+    getDeviceIP,
+    getRoomId,
+    getRoomMetadata,
+    expandIPv6,
+    normalizeRoomCode,
+    getLocalIPs,
+    buildIceConfig,
+    rooms
+} = require('../js/server.js');
 
 test('getDeviceIP - should extract correct IP from various socket headers', () => {
     // 1. Direct local IP
@@ -41,7 +50,30 @@ test('getDeviceIP - should extract correct IP from various socket headers', () =
     };
     assert.equal(getDeviceIP(socket4), '203.0.113.195');
 
-    // 5. Corrupted / missing input fallback
+    // 5. Cloudflare cf-connecting-ip takes priority over x-forwarded-for
+    const socketCf = {
+        handshake: {
+            headers: {
+                'cf-connecting-ip': '42.113.191.144',
+                'x-forwarded-for': '172.70.1.10, 10.0.0.1'
+            },
+            address: '127.0.0.1'
+        }
+    };
+    assert.equal(getDeviceIP(socketCf), '42.113.191.144');
+
+    // 6. Strip port from IPv4:port
+    const socketWithPort = {
+        handshake: {
+            headers: {
+                'x-forwarded-for': '42.113.191.149:54321'
+            },
+            address: '127.0.0.1'
+        }
+    };
+    assert.equal(getDeviceIP(socketWithPort), '42.113.191.149');
+
+    // 7. Corrupted / missing input fallback
     const socket5 = {
         handshake: {
             headers: {},
@@ -51,7 +83,7 @@ test('getDeviceIP - should extract correct IP from various socket headers', () =
     assert.equal(getDeviceIP(socket5), '127.0.0.1');
 });
 
-test('getRoomId - should correctly partition LAN vs IPv6 vs Public networks', () => {
+test('getRoomId & getRoomMetadata - should group LAN, IPv4 /24 subnets, IPv6 /64, and custom room codes', () => {
     // Localhost & LAN
     assert.equal(getRoomId('127.0.0.1'), 'LAN-Network');
     assert.equal(getRoomId('192.168.1.1'), 'LAN-Network');
@@ -62,25 +94,75 @@ test('getRoomId - should correctly partition LAN vs IPv6 vs Public networks', ()
     assert.equal(getRoomId('172.25.10.5'), 'LAN-Network');
     assert.equal(getRoomId('172.31.255.254'), 'LAN-Network');
 
-    // Not LAN (e.g. 172.32 is public)
+    // Not LAN (e.g. 172.32 is public) -> grouped by /24
     assert.notEqual(getRoomId('172.32.0.1'), 'LAN-Network');
-    assert.equal(getRoomId('172.32.0.1'), '172.32.0.1');
+    assert.equal(getRoomId('172.32.0.1'), 'Public-172.32.0');
 
-    // Public IPv4
-    assert.equal(getRoomId('113.161.45.22'), '113.161.45.22');
+    // Public IPv4 NAT Pool (e.g. school network 42.113.191.144 & .149)
+    assert.equal(getRoomId('42.113.191.144'), 'Public-42.113.191');
+    assert.equal(getRoomId('42.113.191.149'), 'Public-42.113.191');
+    assert.equal(
+        getRoomId('42.113.191.144'),
+        getRoomId('42.113.191.149'),
+        'Hai thiết bị cùng dải IPv4 /24 phải vào chung phòng'
+    );
 
-    // IPv6 /64 prefix grouping
+    // IPv6 /64 prefix grouping (including compressed '::')
     const ipv6Device1 = '2402:800:61c2:887b:c0de:1234:5678:9abc';
     const ipv6Device2 = '2402:800:61c2:887b:aaaa:bbbb:cccc:dddd';
-    const room1 = getRoomId(ipv6Device1);
-    const room2 = getRoomId(ipv6Device2);
+    assert.equal(getRoomId(ipv6Device1), 'IPv6-Network-2402:0800:61c2:887b');
+    assert.equal(getRoomId(ipv6Device1), getRoomId(ipv6Device2));
 
-    assert.equal(room1, 'IPv6-Network-2402:800:61c2:887b');
-    assert.equal(room1, room2, 'Hai thiết bị trong cùng dải IPv6 /64 phải chung phòng');
+    const compressed1 = '2402:800::1';
+    const compressed2 = '2402:800::abcd';
+    assert.equal(expandIPv6(compressed1), '2402:0800:0000:0000:0000:0000:0000:0001');
+    assert.equal(getRoomId(compressed1), 'IPv6-Network-2402:0800:0000:0000');
+    assert.equal(getRoomId(compressed1), getRoomId(compressed2));
+
+    // Custom room code overrides network IP differences (Multi-WAN / 4G / different VLANs)
+    assert.equal(normalizeRoomCode(' cntt k24! '), 'CNTTK24');
+    assert.equal(normalizeRoomCode('cntt-k24'), 'CNTT-K24');
+    assert.equal(getRoomId('42.113.191.144', 'cntt-k24'), 'ROOM-CNTT-K24');
+    assert.equal(getRoomId('14.161.20.5', 'CNTT-K24'), 'ROOM-CNTT-K24');
+    assert.equal(getRoomId('2402:800::1', 'cntt-k24'), 'ROOM-CNTT-K24');
+
+    const meta = getRoomMetadata('42.113.191.144', 'lop-a1');
+    assert.equal(meta.roomMode, 'custom');
+    assert.equal(meta.roomCode, 'LOP-A1');
 
     // Invalid input fallback
     assert.equal(getRoomId(null), 'LAN-Network');
     assert.equal(getRoomId(undefined), 'LAN-Network');
+});
+
+test('buildIceConfig - includes STUN by default and TURN when env vars are set', () => {
+    const prevUrl = process.env.TURN_URL;
+    const prevUrls = process.env.TURN_URLS;
+    const prevUser = process.env.TURN_USERNAME;
+    const prevCred = process.env.TURN_CREDENTIAL;
+
+    try {
+        delete process.env.TURN_URL;
+        delete process.env.TURN_URLS;
+        const defaultCfg = buildIceConfig();
+        assert.ok(Array.isArray(defaultCfg.iceServers));
+        assert.ok(defaultCfg.iceServers.length >= 4);
+
+        process.env.TURN_URLS = 'turn:example.com:3478,turns:example.com:443?transport=tcp';
+        process.env.TURN_USERNAME = 'demo';
+        process.env.TURN_CREDENTIAL = 'secret';
+        const turnCfg = buildIceConfig();
+        const turnServer = turnCfg.iceServers.find(s => Array.isArray(s.urls));
+        assert.ok(turnServer);
+        assert.deepEqual(turnServer.urls, ['turn:example.com:3478', 'turns:example.com:443?transport=tcp']);
+        assert.equal(turnServer.username, 'demo');
+        assert.equal(turnServer.credential, 'secret');
+    } finally {
+        if (prevUrl === undefined) delete process.env.TURN_URL; else process.env.TURN_URL = prevUrl;
+        if (prevUrls === undefined) delete process.env.TURN_URLS; else process.env.TURN_URLS = prevUrls;
+        if (prevUser === undefined) delete process.env.TURN_USERNAME; else process.env.TURN_USERNAME = prevUser;
+        if (prevCred === undefined) delete process.env.TURN_CREDENTIAL; else process.env.TURN_CREDENTIAL = prevCred;
+    }
 });
 
 test('getLocalIPs - should enumerate available IPv4 addresses', () => {
