@@ -62,6 +62,7 @@ const fileInput = document.getElementById('file-input');
 const attachBtn = document.getElementById('attach-btn');
 const mobileBackBtn = document.getElementById('mobile-back-btn');
 const pinnedMessageContainer = document.getElementById('pinned-message-container');
+const pinnedText = document.getElementById('pinned-text');
 const togglePinnedBtn = document.getElementById('toggle-pinned-btn');
 const pinnedCaretIcon = document.getElementById('pinned-caret-icon');
 
@@ -114,12 +115,70 @@ const toggleMsgSearchBtn = document.getElementById('toggle-msg-search-btn');
 const closeMsgSearchBtn = document.getElementById('close-msg-search-btn');
 const messageSearchInput = document.getElementById('message-search-input');
 
-// Image Modal UI
+// Image & Video Modal UI
 const imageModal = document.getElementById('image-modal');
 const imageModalImg = document.getElementById('image-modal-img');
 const imageModalTitle = document.getElementById('image-modal-title');
 const imageModalDownload = document.getElementById('image-modal-download');
 const imageModalClose = document.getElementById('image-modal-close');
+
+const videoModal = document.getElementById('video-modal');
+const videoModalClose = document.getElementById('video-modal-close');
+const videoModalPlayer = document.getElementById('video-modal-player');
+const videoModalTitle = document.getElementById('video-modal-title');
+const videoModalDownload = document.getElementById('video-modal-download');
+
+// Conversation Info Drawer UI
+const toggleChatInfoBtn = document.getElementById('toggle-chat-info-btn');
+const chatInfoDrawer = document.getElementById('chat-info-drawer');
+const closeChatInfoBtn = document.getElementById('close-chat-info-btn');
+const drawerChatAvatar = document.getElementById('drawer-chat-avatar');
+const drawerChatTitle = document.getElementById('drawer-chat-title');
+const drawerChatSubtitle = document.getElementById('drawer-chat-subtitle');
+const drawerQuickActions = document.getElementById('drawer-quick-actions');
+const drawerVoiceCallBtn = document.getElementById('drawer-voice-call-btn');
+const drawerVideoCallBtn = document.getElementById('drawer-video-call-btn');
+const drawerMembersSection = document.getElementById('drawer-members-section');
+const drawerMembersToggle = document.getElementById('drawer-members-toggle');
+const drawerMembersHeading = document.getElementById('drawer-members-heading');
+const drawerMembersBody = document.getElementById('drawer-members-body');
+const drawerMembersList = document.getElementById('drawer-members-list');
+const drawerPinSection = document.getElementById('drawer-pin-section');
+const drawerPinToggle = document.getElementById('drawer-pin-toggle');
+const drawerPinBody = document.getElementById('drawer-pin-body');
+const drawerPinCurrent = document.getElementById('drawer-pin-current');
+const drawerPinForm = document.getElementById('drawer-pin-form');
+const drawerPinInput = document.getElementById('drawer-pin-input');
+const drawerPinClearBtn = document.getElementById('drawer-pin-clear-btn');
+const drawerPinResetBtn = document.getElementById('drawer-pin-reset-btn');
+const drawerMediaSection = document.getElementById('drawer-media-section');
+const drawerMediaToggles = document.querySelectorAll('.drawer-media-toggle');
+const drawerMediaMoreButtons = document.querySelectorAll('[data-drawer-media-more]');
+const drawerMediaContents = {
+    images: document.querySelector('[data-drawer-media-content="images"]'),
+    files: document.querySelector('[data-drawer-media-content="files"]'),
+    links: document.querySelector('[data-drawer-media-content="links"]')
+};
+const countMediaImages = document.getElementById('count-media-images');
+const countMediaFiles = document.getElementById('count-media-files');
+const countMediaLinks = document.getElementById('count-media-links');
+const drawerStorageStats = document.getElementById('drawer-storage-stats');
+const clearCurrentChatCacheBtn = document.getElementById('clear-current-chat-cache-btn');
+const drawerOpenGlobalStorageBtn = document.getElementById('drawer-open-global-storage-btn');
+
+// Global Cache & Settings Modal UI
+const openStorageModalBtn = document.getElementById('open-storage-modal-btn');
+const storageModal = document.getElementById('storage-modal');
+const closeStorageModalBtn = document.getElementById('close-storage-modal-btn');
+const storageTotalMsgs = document.getElementById('storage-total-msgs');
+const storageTotalFiles = document.getElementById('storage-total-files');
+const storageBrowserQuota = document.getElementById('storage-browser-quota');
+const settingHistoryLimit = document.getElementById('setting-history-limit');
+const settingSaveMedia = document.getElementById('setting-save-media');
+const settingSoundEnabled = document.getElementById('setting-sound-enabled');
+const storageChatList = document.getElementById('storage-chat-list');
+const clearAllMediaBtn = document.getElementById('clear-all-media-btn');
+const clearAllCacheBtn = document.getElementById('clear-all-cache-btn');
 
 // Call Modals UI
 const incomingCallModal = document.getElementById('incoming-call-modal');
@@ -141,6 +200,58 @@ const endCallBtn = document.getElementById('end-call-btn');
 const micIcon = document.getElementById('mic-icon');
 const camIcon = document.getElementById('cam-icon');
 
+// Settings & Pinned State
+const SETTINGS_STORAGE_KEY = 'localchat_settings_v1';
+const PINNED_STORAGE_KEY = 'localchat_pinned_v1';
+const DEFAULT_GENERAL_PIN = 'Hệ thống: Kênh trao đổi nội bộ qua Wi-Fi (P2P tốc độ cao, không lưu đám mây)';
+
+function loadAppSettings() {
+    const defaults = { historyLimit: 50, saveMedia: true, soundEnabled: true };
+    try {
+        const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+        if (!raw) return defaults;
+        const parsed = JSON.parse(raw);
+        const parsedLimit = Number(parsed.historyLimit);
+        return {
+            historyLimit: Number.isFinite(parsedLimit) && parsedLimit >= 0 ? parsedLimit : 50,
+            saveMedia: typeof parsed.saveMedia === 'boolean' ? parsed.saveMedia : true,
+            soundEnabled: typeof parsed.soundEnabled === 'boolean' ? parsed.soundEnabled : true
+        };
+    } catch (e) {
+        return defaults;
+    }
+}
+
+function saveAppSettings() {
+    try {
+        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(appSettings));
+    } catch (e) {}
+}
+
+let appSettings = loadAppSettings();
+
+function loadPersistedPins() {
+    try {
+        const raw = localStorage.getItem(PINNED_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed && typeof parsed === 'object') {
+            return {
+                general: parsed.general || null,
+                peers: (parsed.peers && typeof parsed.peers === 'object') ? parsed.peers : {}
+            };
+        }
+    } catch (e) {}
+    return { general: null, peers: {} };
+}
+
+function savePersistedPins() {
+    try {
+        localStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify(pinnedMessages));
+    } catch (e) {}
+}
+
+let pinnedMessages = loadPersistedPins();
+
 // State
 let myInfo = null;
 let users = [];
@@ -152,8 +263,11 @@ let unreadCounts = {
     'general': 0
 };
 let msgSearchQuery = '';
+const drawerMediaOpen = { images: false, files: false, links: false };
+const drawerMediaExpanded = { images: false, files: false, links: false };
 const seenMessageIds = new Set();
 const restoredFileUrls = {}; // fileId -> objectUrl
+const indexedDbFileMeta = {}; // fileId -> { size, chatId, name, timestamp }
 
 // --- WebRTC State ---
 const peerConnections = {}; // targetId -> RTCPeerConnection (DataChannel)
@@ -218,17 +332,52 @@ function initIndexedDB() {
     });
 }
 
-async function saveFileToIndexedDB(fileId, name, size, blob, timestamp) {
-    if (!dbInstance || !fileId || !blob) return;
+function findChatIdForFileId(fileId) {
+    if (!fileId) return '';
+    const keys = Object.keys(chatHistory);
+    for (let i = 0; i < keys.length; i++) {
+        const cid = keys[i];
+        if ((chatHistory[cid] || []).some(m => m && m.id === fileId)) {
+            return cid;
+        }
+    }
+    return '';
+}
+
+function revokeObjectUrlsForIds(ids) {
+    (ids || []).forEach(id => {
+        if (restoredFileUrls[id]) {
+            try {
+                URL.revokeObjectURL(restoredFileUrls[id]);
+            } catch (e) {}
+            delete restoredFileUrls[id];
+        }
+    });
+}
+
+async function saveFileToIndexedDB(fileId, name, size, blob, timestamp, chatId = '') {
+    if (!fileId || !blob) return;
+    const effectiveSize = size || blob.size || 0;
+    const effectiveChatId = chatId || findChatIdForFileId(fileId) || currentActiveChat || 'general';
+    if (!appSettings.saveMedia) return;
+
+    indexedDbFileMeta[fileId] = {
+        size: effectiveSize,
+        chatId: effectiveChatId,
+        name: name || '',
+        timestamp: timestamp || ''
+    };
+    if (!dbInstance) return;
     try {
         const tx = dbInstance.transaction('files', 'readwrite');
         const store = tx.objectStore('files');
         store.put({
             id: fileId,
             name: name,
-            size: size,
+            size: effectiveSize,
             blob: blob,
-            timestamp: timestamp
+            timestamp: timestamp,
+            chatId: effectiveChatId
         });
     } catch (e) {
         console.warn('Lỗi lưu file vào IndexedDB:', e);
@@ -244,7 +393,15 @@ async function restoreFilesFromIndexedDB() {
         request.onsuccess = () => {
             const records = request.result || [];
             records.forEach(rec => {
-                if (rec.id && rec.blob) {
+                if (rec.id) {
+                    indexedDbFileMeta[rec.id] = {
+                        size: rec.size || (rec.blob ? rec.blob.size : 0),
+                        chatId: rec.chatId || findChatIdForFileId(rec.id) || '',
+                        name: rec.name || '',
+                        timestamp: rec.timestamp || ''
+                    };
+                }
+                if (rec.id && rec.blob && !restoredFileUrls[rec.id]) {
                     try {
                         const url = URL.createObjectURL(rec.blob);
                         restoredFileUrls[rec.id] = url;
@@ -254,10 +411,92 @@ async function restoreFilesFromIndexedDB() {
                 }
             });
             renderChatHistory();
+            if (typeof renderChatInfoDrawer === 'function' && appContainer.classList.contains('show-info')) {
+                renderChatInfoDrawer();
+            }
+            if (typeof renderStorageModal === 'function' && storageModal && storageModal.classList.contains('active')) {
+                renderStorageModal();
+            }
         };
     } catch (e) {
         console.warn('Lỗi đọc IndexedDB:', e);
     }
+}
+
+function deleteIndexedDbFilesByIds(fileIds) {
+    const uniqueIds = Array.from(new Set((fileIds || []).filter(Boolean)));
+    revokeObjectUrlsForIds(uniqueIds);
+    uniqueIds.forEach(id => {
+        delete indexedDbFileMeta[id];
+    });
+    if (!dbInstance || uniqueIds.length === 0) return Promise.resolve();
+    return new Promise((resolve) => {
+        try {
+            const tx = dbInstance.transaction('files', 'readwrite');
+            const store = tx.objectStore('files');
+            uniqueIds.forEach(id => store.delete(id));
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => resolve();
+        } catch (e) {
+            resolve();
+        }
+    });
+}
+
+function clearAllIndexedDbFiles() {
+    const allIds = Array.from(new Set([
+        ...Object.keys(restoredFileUrls),
+        ...Object.keys(indexedDbFileMeta)
+    ]));
+    revokeObjectUrlsForIds(allIds);
+    Object.keys(indexedDbFileMeta).forEach(k => delete indexedDbFileMeta[k]);
+    if (!dbInstance) return Promise.resolve();
+    return new Promise((resolve) => {
+        try {
+            const tx = dbInstance.transaction('files', 'readwrite');
+            const store = tx.objectStore('files');
+            store.clear();
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => resolve();
+        } catch (e) {
+            resolve();
+        }
+    });
+}
+
+function getChatFileIds(chatId) {
+    const ids = new Set();
+    (chatHistory[chatId] || []).forEach(m => {
+        if (m && m.isFile && m.id && (indexedDbFileMeta[m.id] || restoredFileUrls[m.id])) {
+            ids.add(m.id);
+        }
+    });
+    Object.entries(indexedDbFileMeta).forEach(([fileId, meta]) => {
+        if (meta && meta.chatId === chatId) {
+            ids.add(fileId);
+        }
+    });
+    return Array.from(ids);
+}
+
+function getChatStorageStats(chatId) {
+    const history = chatHistory[chatId] || [];
+    const fileIds = getChatFileIds(chatId);
+    let totalBytes = 0;
+    const msgSizeById = {};
+    history.forEach(m => {
+        if (m && m.id && m.fileSize) msgSizeById[m.id] = m.fileSize;
+    });
+    fileIds.forEach(id => {
+        const meta = indexedDbFileMeta[id];
+        totalBytes += (meta && meta.size) || msgSizeById[id] || 0;
+    });
+    return {
+        messageCount: history.length,
+        fileCount: fileIds.length,
+        fileBytes: totalBytes,
+        fileIds: fileIds
+    };
 }
 
 // Khởi tạo IndexedDB ngay khi tải trang
@@ -303,12 +542,24 @@ function isImageFile(fileName) {
     return /\.(jpe?g|png|gif|webp|svg|bmp)$/i.test(fileName || '');
 }
 
+function isVideoFile(fileName) {
+    return /\.(mp4|webm|mov|m4v|ogv)$/i.test(fileName || '');
+}
+
+function extractUrlsFromText(text) {
+    if (!text || typeof text !== 'string') return [];
+    const urlRegex = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
+    const matches = text.match(urlRegex) || [];
+    return matches.filter(u => /^https?:\/\//i.test(u));
+}
+
 function generateId() {
     return Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 9);
 }
 
 // Notification chime via Web Audio API
 function playNotificationSound() {
+    if (!appSettings.soundEnabled) return;
     try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (!AudioCtx) return;
@@ -409,6 +660,15 @@ function isMessageMine(msg) {
 // =========================================================
 // LOCALSTORAGE PERSISTENCE (Lịch sử chat)
 // =========================================================
+function applyHistoryLimit(arr) {
+    const list = Array.isArray(arr) ? arr : [];
+    const limit = Number(appSettings.historyLimit);
+    if (Number.isFinite(limit) && limit > 0) {
+        return list.slice(-limit);
+    }
+    return list;
+}
+
 function loadPersistedHistory() {
     try {
         const saved = localStorage.getItem('localchat_history_v1');
@@ -417,7 +677,7 @@ function loadPersistedHistory() {
             if (parsed && typeof parsed === 'object') {
                 Object.keys(parsed).forEach(k => {
                     if (Array.isArray(parsed[k])) {
-                        chatHistory[k] = parsed[k].slice(-50).map(m => ({
+                        chatHistory[k] = applyHistoryLimit(parsed[k]).map(m => ({
                             ...m,
                             isMine: isMessageMine(m)
                         }));
@@ -434,7 +694,7 @@ function savePersistedHistory() {
     try {
         const toSave = {};
         Object.keys(chatHistory).forEach(k => {
-            toSave[k] = (chatHistory[k] || []).slice(-50).map(m => {
+            toSave[k] = applyHistoryLimit(chatHistory[k] || []).map(m => {
                 const mine = isMessageMine(m);
                 return {
                     id: m.id,
@@ -561,6 +821,11 @@ function switchRoom(nextCode) {
 
     if (roomChanged) {
         currentActiveChat = 'general';
+        pinnedMessages.general = null;
+        savePersistedPins();
+        if (typeof closeChatInfoDrawer === 'function') {
+            closeChatInfoDrawer();
+        }
         if (appContainer) {
             appContainer.classList.remove('show-chat');
         }
@@ -606,9 +871,123 @@ window.addEventListener('online', () => {
     }
 });
 
+let receivedServerPinUpdate = false;
+let currentSyncedRoomId = '';
+
+function sanitizePinTextClient(rawText) {
+    if (typeof rawText !== 'string') return '';
+    return rawText.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+}
+
+function getEffectivePin(chatId) {
+    if (chatId === 'general') {
+        const gen = pinnedMessages.general;
+        if (!gen) {
+            return { text: DEFAULT_GENERAL_PIN, isDefault: true, isCleared: false, updatedBy: '' };
+        }
+        if (gen.isCleared || !gen.text) {
+            return { text: '', isDefault: false, isCleared: true, updatedBy: gen.updatedBy || '' };
+        }
+        return { text: gen.text, isDefault: false, isCleared: false, updatedBy: gen.updatedBy || '' };
+    }
+    const peerPin = pinnedMessages.peers && pinnedMessages.peers[chatId];
+    if (!peerPin || peerPin.isCleared || !peerPin.text) {
+        return { text: '', isDefault: false, isCleared: true, updatedBy: '' };
+    }
+    return { text: peerPin.text, isDefault: false, isCleared: false, updatedBy: peerPin.updatedBy || '' };
+}
+
+function renderPinnedBanner() {
+    if (!pinnedMessageContainer || !pinnedText) return;
+    const pin = getEffectivePin(currentActiveChat);
+    if (pin.isCleared || !pin.text) {
+        pinnedMessageContainer.style.display = 'none';
+        pinnedText.textContent = '';
+        return;
+    }
+    pinnedMessageContainer.style.display = 'flex';
+    pinnedText.textContent = (pin.updatedBy && !pin.isDefault) ? `${pin.updatedBy}: ${pin.text}` : pin.text;
+}
+
+function applyPinnedMessage(chatScope, rawText, options = {}) {
+    const { resetDefault = false, updatedBy = '', forceSyncInput = true } = options;
+    const scope = chatScope || 'general';
+    const text = sanitizePinTextClient(rawText);
+
+    if (scope === 'general') {
+        if (resetDefault) {
+            pinnedMessages.general = null;
+        } else if (!text) {
+            pinnedMessages.general = { roomId: (myInfo && myInfo.roomId) || '', text: '', isCleared: true, updatedBy };
+        } else {
+            pinnedMessages.general = { roomId: (myInfo && myInfo.roomId) || '', text, isCleared: false, updatedBy };
+        }
+    } else {
+        if (!pinnedMessages.peers || typeof pinnedMessages.peers !== 'object') {
+            pinnedMessages.peers = {};
+        }
+        if (resetDefault || !text) {
+            delete pinnedMessages.peers[scope];
+        } else {
+            pinnedMessages.peers[scope] = { text, isCleared: false, updatedBy };
+        }
+    }
+
+    savePersistedPins();
+    if (scope === currentActiveChat) {
+        renderPinnedBanner();
+        if (forceSyncInput && drawerPinInput && document.activeElement !== drawerPinInput) {
+            const effective = getEffectivePin(currentActiveChat);
+            drawerPinInput.value = effective.isCleared ? '' : effective.text;
+        }
+        renderDrawerPinSection(true);
+    }
+}
+
+function submitPinnedMessage(chatScope, rawText, options = {}) {
+    const { resetDefault = false } = options;
+    const cleaned = resetDefault ? '' : sanitizePinTextClient(rawText);
+    applyPinnedMessage(chatScope, cleaned, {
+        resetDefault,
+        updatedBy: (myInfo && myInfo.name) || 'Bạn',
+        forceSyncInput: true
+    });
+    if (chatScope === currentActiveChat && drawerPinInput) {
+        const effective = getEffectivePin(currentActiveChat);
+        drawerPinInput.value = effective.isCleared ? '' : effective.text;
+    }
+    if (socket.connected) {
+        socket.emit('update_pinned_message', {
+            chatScope,
+            text: cleaned,
+            resetDefault
+        });
+    }
+}
+
+socket.on('pinned_message_update', (payload) => {
+    if (!payload) return;
+    receivedServerPinUpdate = true;
+    const scope = payload.chatScope || 'general';
+    applyPinnedMessage(scope, payload.text || '', {
+        resetDefault: Boolean(payload.resetDefault),
+        updatedBy: payload.updatedBy || '',
+        forceSyncInput: true
+    });
+});
+
 socket.on('your info', (info) => {
     updateConnectionStatus(true);
+    const prevRoomId = currentSyncedRoomId;
     myInfo = info;
+    currentSyncedRoomId = info.roomId || '';
+    if (
+        (prevRoomId && prevRoomId !== currentSyncedRoomId) ||
+        (!receivedServerPinUpdate && pinnedMessages.general && pinnedMessages.general.roomId && pinnedMessages.general.roomId !== currentSyncedRoomId)
+    ) {
+        pinnedMessages.general = null;
+        savePersistedPins();
+    }
     myDisplayName.textContent = info.name;
     myIpLabel.textContent = info.ip ? `IP: ${info.ip}` : '';
 
@@ -800,8 +1179,9 @@ function setupDataChannel(dc, targetId) {
                         try {
                             const blob = new Blob(fileData.chunks);
                             const fileUrl = URL.createObjectURL(blob);
+                            const chatScope = fileData.to === 'general' ? 'general' : senderInfo.id;
 
-                            saveFileToIndexedDB(fileData.id, fileData.name, fileData.size, blob, fileData.timestamp);
+                            saveFileToIndexedDB(fileData.id, fileData.name, fileData.size, blob, fileData.timestamp, chatScope);
                             restoredFileUrls[fileData.id] = fileUrl;
 
                             handleIncomingMessage({
@@ -861,11 +1241,17 @@ async function cacheRelayFileToIndexedDB(msg) {
         const blob = msg.mimeType ? new Blob([rawBlob], { type: msg.mimeType }) : rawBlob;
         const objectUrl = URL.createObjectURL(blob);
         restoredFileUrls[msg.id] = objectUrl;
-        saveFileToIndexedDB(msg.id, msg.fileName, msg.fileSize || blob.size, blob, msg.timestamp);
-
         const targetChat = msg.to === 'general' ? 'general' : (msg.from && msg.from.id);
+        saveFileToIndexedDB(msg.id, msg.fileName, msg.fileSize || blob.size, blob, msg.timestamp, targetChat);
+
         if (currentActiveChat === targetChat) {
             renderChatHistory();
+        }
+        if (typeof renderChatInfoDrawer === 'function' && appContainer.classList.contains('show-info') && currentActiveChat === targetChat) {
+            renderChatInfoDrawer();
+        }
+        if (typeof renderStorageModal === 'function' && storageModal && storageModal.classList.contains('active')) {
+            renderStorageModal();
         }
     } catch (e) {
         console.warn('Không thể tải trước tệp từ Relay:', e);
@@ -913,12 +1299,18 @@ function handleIncomingMessage(msg) {
     if (currentActiveChat === targetChat) {
         renderMessage(msg);
         scrollToBottom();
+        if (typeof renderChatInfoDrawer === 'function' && appContainer.classList.contains('show-info')) {
+            renderChatInfoDrawer();
+        }
     } else {
         unreadCounts[targetChat] = (unreadCounts[targetChat] || 0) + 1;
         playNotificationSound();
         updateTabTitle();
     }
 
+    if (typeof renderStorageModal === 'function' && storageModal && storageModal.classList.contains('active')) {
+        renderStorageModal();
+    }
     updateSidebar();
 }
 
@@ -1534,15 +1926,36 @@ function updateSidebar() {
     }
 
     chatList.innerHTML = html;
+
+    if (typeof renderChatInfoDrawer === 'function' && appContainer.classList.contains('show-info')) {
+        renderChatInfoDrawer({ preservePinInput: true });
+    }
+    if (typeof renderStorageModal === 'function' && storageModal && storageModal.classList.contains('active')) {
+        renderStorageModal();
+    }
 }
 
-function updateChatHeader() {
+function getChatTitle(chatId) {
+    if (chatId === 'general') return 'Nhóm chung nội bộ';
+    const onlineUser = users.find(u => u.id === chatId);
+    if (onlineUser && onlineUser.name) return onlineUser.name;
+    const history = chatHistory[chatId] || [];
+    for (let i = history.length - 1; i >= 0; i--) {
+        const msg = history[i];
+        if (msg && !isMessageMine(msg) && msg.from && msg.from.name) {
+            return `${msg.from.name} (Offline)`;
+        }
+    }
+    return 'Người dùng đã rời mạng';
+}
+
+function updateChatHeader(options = {}) {
     updateCallUIButtons();
+    renderPinnedBanner();
 
     if (currentActiveChat === 'general') {
         currentChatName.textContent = 'Nhóm chung nội bộ';
         currentChatAvatar.innerHTML = `<i class="ph-fill ph-users-three"></i>`;
-        pinnedMessageContainer.style.display = 'flex';
 
         const count = users.length;
         if (count <= 1) {
@@ -1552,7 +1965,6 @@ function updateChatHeader() {
         }
     } else {
         const user = users.find(u => u.id === currentActiveChat);
-        pinnedMessageContainer.style.display = 'none';
 
         if (user) {
             currentChatName.textContent = user.name;
@@ -1560,12 +1972,16 @@ function updateChatHeader() {
             const isP2pReady = dataChannels[user.id] && dataChannels[user.id].readyState === 'open';
             currentChatSubtitle.textContent = isP2pReady ? 'Trực tuyến (P2P)' : 'Trực tuyến';
         } else {
-            currentChatName.textContent = 'Người dùng đã rời mạng';
+            currentChatName.textContent = getChatTitle(currentActiveChat);
             currentChatAvatar.innerHTML = `<i class="ph-fill ph-user-minus"></i>`;
             currentChatSubtitle.textContent = 'Offline';
             voiceCallBtn.style.display = 'none';
             videoCallBtn.style.display = 'none';
         }
+    }
+
+    if (typeof renderChatInfoDrawer === 'function' && appContainer.classList.contains('show-info')) {
+        renderChatInfoDrawer({ preservePinInput: options.preservePinInput !== false });
     }
 }
 
@@ -1609,7 +2025,7 @@ window.switchChat = function (chatId) {
     appContainer.classList.add('show-chat');
 
     updateSidebar();
-    updateChatHeader();
+    updateChatHeader({ preservePinInput: false });
     renderChatHistory();
 };
 
@@ -1670,13 +2086,14 @@ function renderMessage(msg, isHighlighted = false) {
         const safeFileName = escapeHtml(msg.fileName || 'tap-tin');
         const formattedSize = msg.fileSize ? formatFileSize(msg.fileSize) : 'Tải xuống';
         const isImg = isImageFile(msg.fileName);
+        const isVid = isVideoFile(msg.fileName);
 
         const localBlobUrl = msg.fileUrl || restoredFileUrls[msg.id];
         const downloadUrl = localBlobUrl || msg.relayFileUrl;
 
         if (isImg && localBlobUrl) {
             contentHtml = `
-                <div class="msg-image-wrap" onclick="openImageModal('${escapeHtml(localBlobUrl)}', '${safeFileName}')">
+                <div class="msg-image-wrap js-open-image">
                     <img src="${escapeHtml(localBlobUrl)}" alt="${safeFileName}" class="msg-image-preview">
                 </div>
                 <a href="${escapeHtml(localBlobUrl)}" target="_blank" download="${safeFileName}" class="msg-file">
@@ -1684,6 +2101,28 @@ function renderMessage(msg, isHighlighted = false) {
                     <div class="file-info">
                         <span class="file-name">${safeFileName}</span>
                         <span class="file-size">${formattedSize}</span>
+                    </div>
+                </a>
+            `;
+        } else if (isVid && downloadUrl) {
+            const subLabel = !localBlobUrl && msg.relayFileUrl
+                ? `${formattedSize} • Tải từ Relay`
+                : formattedSize;
+            contentHtml = `
+                ${localBlobUrl ? `
+                    <div class="video-thumb-card js-open-video" role="button" tabindex="0">
+                        <div class="video-play-badge"><i class="ph-fill ph-play"></i></div>
+                        <div class="file-info" style="min-width:0;flex:1;">
+                            <span class="file-name" style="color:#fff;">${safeFileName}</span>
+                            <span class="file-size" style="color:#cbd5e1;">Bấm để phát video • ${formattedSize}</span>
+                        </div>
+                    </div>
+                ` : ''}
+                <a href="${escapeHtml(downloadUrl)}" target="_blank" download="${safeFileName}" class="msg-file">
+                    <i class="ph-fill ph-video-camera"></i>
+                    <div class="file-info">
+                        <span class="file-name">${safeFileName}</span>
+                        <span class="file-size">${subLabel}</span>
                     </div>
                 </a>
             `;
@@ -1716,6 +2155,9 @@ function renderMessage(msg, isHighlighted = false) {
     }
 
     const senderName = msg.from ? escapeHtml(msg.from.name || 'Người dùng') : 'Người dùng';
+    const pinButtonHtml = (!msg.isFile && msg.content)
+        ? `<button type="button" class="msg-pin-btn" title="Ghim tin nhắn này" aria-label="Ghim tin nhắn"><i class="ph ph-push-pin"></i></button>`
+        : '';
 
     msgDiv.innerHTML = `
         <div class="avatar">
@@ -1725,10 +2167,42 @@ function renderMessage(msg, isHighlighted = false) {
             <span class="msg-sender">${senderName}</span>
             <div class="msg-bubble ${isHighlighted ? 'highlighted' : ''}">
                 ${contentHtml}
-                <span class="msg-time">${escapeHtml(formatTime(msg.timestamp))}</span>
+                <div class="msg-meta-row" style="display:flex;align-items:center;justify-content:flex-end;gap:2px;">
+                    <span class="msg-time">${escapeHtml(formatTime(msg.timestamp))}</span>
+                    ${pinButtonHtml}
+                </div>
             </div>
         </div>
     `;
+
+    const imgWrap = msgDiv.querySelector('.js-open-image');
+    if (imgWrap) {
+        const localBlobUrl = msg.fileUrl || restoredFileUrls[msg.id];
+        imgWrap.addEventListener('click', () => {
+            openImageModal(localBlobUrl, msg.fileName || 'Hình ảnh');
+        });
+    }
+
+    const vidCard = msgDiv.querySelector('.js-open-video');
+    if (vidCard) {
+        const localBlobUrl = msg.fileUrl || restoredFileUrls[msg.id];
+        const downloadUrl = localBlobUrl || msg.relayFileUrl;
+        const triggerOpenVideo = () => openVideoModal(localBlobUrl, msg.fileName || 'Video', downloadUrl);
+        vidCard.addEventListener('click', triggerOpenVideo);
+        vidCard.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                triggerOpenVideo();
+            }
+        });
+    }
+
+    const msgPinBtn = msgDiv.querySelector('.msg-pin-btn');
+    if (msgPinBtn) {
+        msgPinBtn.addEventListener('click', () => {
+            submitPinnedMessage(currentActiveChat, msg.content);
+        });
+    }
 
     messagesContainer.appendChild(msgDiv);
 }
@@ -1757,9 +2231,720 @@ imageModal.addEventListener('click', (e) => {
     }
 });
 
+// Lightbox phát video
+function openVideoModal(videoUrl, name, downloadUrl) {
+    if (!videoUrl || !videoModal || !videoModalPlayer) return;
+    videoModalTitle.textContent = name || 'Xem video';
+    videoModalPlayer.src = videoUrl;
+    if (videoModalDownload) {
+        videoModalDownload.href = downloadUrl || videoUrl;
+        videoModalDownload.download = name || 'video.mp4';
+    }
+    videoModal.classList.add('active');
+    videoModalPlayer.play().catch(() => {});
+}
+window.openVideoModal = openVideoModal;
+
+function closeVideoModal() {
+    if (!videoModal) return;
+    videoModal.classList.remove('active');
+    if (videoModalPlayer) {
+        videoModalPlayer.pause();
+        videoModalPlayer.removeAttribute('src');
+        videoModalPlayer.load();
+    }
+}
+
+if (videoModalClose) {
+    videoModalClose.addEventListener('click', closeVideoModal);
+}
+if (videoModal) {
+    videoModal.addEventListener('click', (e) => {
+        if (e.target === videoModal) {
+            closeVideoModal();
+        }
+    });
+}
+
 // Nút quay lại trên Mobile (Trở về danh sách Zalo)
 mobileBackBtn.addEventListener('click', () => {
+    closeChatInfoDrawer();
     appContainer.classList.remove('show-chat');
+});
+
+// =========================================================
+// CONVERSATION INFO DRAWER (Mở rộng đoạn chat kiểu Zalo)
+// =========================================================
+function openChatInfoDrawer() {
+    if (!appContainer) return;
+    appContainer.classList.add('show-info');
+    if (toggleChatInfoBtn) toggleChatInfoBtn.classList.add('active');
+    renderChatInfoDrawer({ preservePinInput: false });
+}
+
+function closeChatInfoDrawer() {
+    if (!appContainer) return;
+    appContainer.classList.remove('show-info');
+    if (toggleChatInfoBtn) toggleChatInfoBtn.classList.remove('active');
+}
+
+function renderChatInfoDrawer(options = {}) {
+    if (!chatInfoDrawer || !appContainer.classList.contains('show-info')) return;
+    const preservePinInput = Boolean(options.preservePinInput);
+
+    // 1. Summary header card
+    if (currentActiveChat === 'general') {
+        if (drawerChatAvatar) drawerChatAvatar.innerHTML = '<i class="ph-fill ph-users-three"></i>';
+        if (drawerChatTitle) drawerChatTitle.textContent = 'Nhóm chung nội bộ';
+        if (drawerChatSubtitle) {
+            const roomTag = (myInfo && myInfo.roomMode === 'custom' && myInfo.roomCode)
+                ? `Phòng ${myInfo.roomCode}`
+                : 'Tự động theo mạng';
+            drawerChatSubtitle.textContent = `${users.length} thành viên • ${roomTag}`;
+        }
+        if (drawerQuickActions) drawerQuickActions.style.display = 'none';
+    } else {
+        const peer = users.find(u => u.id === currentActiveChat);
+        if (drawerChatAvatar) {
+            drawerChatAvatar.innerHTML = peer ? '<i class="ph-fill ph-user"></i>' : '<i class="ph-fill ph-user-minus"></i>';
+        }
+        if (drawerChatTitle) drawerChatTitle.textContent = getChatTitle(currentActiveChat);
+        if (peer) {
+            const isP2p = Boolean(dataChannels[peer.id] && dataChannels[peer.id].readyState === 'open');
+            const shortId = (peer.deviceId || peer.id || '').slice(-6);
+            if (drawerChatSubtitle) {
+                drawerChatSubtitle.textContent = `${peer.ip || 'Không rõ IP'} • ID ${shortId} • ${isP2p ? 'P2P trực tiếp' : 'Qua Relay'}`;
+            }
+            if (drawerQuickActions) drawerQuickActions.style.display = 'flex';
+        } else {
+            if (drawerChatSubtitle) drawerChatSubtitle.textContent = 'Ngoại tuyến (chỉ xem dữ liệu đệm)';
+            if (drawerQuickActions) drawerQuickActions.style.display = 'none';
+        }
+    }
+
+    // 2. Members list
+    renderDrawerMembers();
+
+    // 3. Pinned message editor
+    renderDrawerPinSection(preservePinInput);
+
+    // 4. Shared media & links
+    renderDrawerMedia();
+
+    // 5. Per-chat cache summary
+    renderDrawerStorage();
+}
+
+function buildMemberRowHtml(userObj, isSelf) {
+    const safeName = escapeHtml((userObj && userObj.name) || 'Người dùng');
+    const initial = escapeHtml(((userObj && userObj.name) || 'U').trim().charAt(0).toUpperCase() || 'U');
+    const shortId = escapeHtml(((userObj && (userObj.deviceId || userObj.id)) || '').slice(-6));
+    const ipText = escapeHtml((userObj && userObj.ip) || 'Ẩn IP');
+    const isP2p = Boolean(!isSelf && userObj && dataChannels[userObj.id] && dataChannels[userObj.id].readyState === 'open');
+
+    const badgeHtml = isSelf
+        ? '<span class="badge-pill badge-self">Bạn</span>'
+        : `<span class="badge-pill ${isP2p ? 'badge-p2p' : 'badge-relay'}">${isP2p ? 'P2P trực tiếp' : 'Qua Relay'}</span>`;
+
+    return `
+        <div class="drawer-member-item ${isSelf ? 'is-self' : ''}" data-member-id="${escapeHtml((userObj && userObj.id) || '')}" role="${isSelf ? 'listitem' : 'button'}" tabindex="${isSelf ? '-1' : '0'}">
+            <div class="drawer-member-avatar">${initial}</div>
+            <div class="drawer-member-info">
+                <div class="drawer-member-name">
+                    <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;">${safeName}</span>
+                    ${badgeHtml}
+                </div>
+                <div class="drawer-member-meta">IP: ${ipText}${shortId ? ` • ID ${shortId}` : ''}</div>
+            </div>
+        </div>
+    `;
+}
+
+function renderDrawerMembers() {
+    if (!drawerMembersSection || !drawerMembersList || !drawerMembersHeading) return;
+    if (currentActiveChat === 'general') {
+        drawerMembersHeading.textContent = `Thành viên (${users.length})`;
+        const sorted = [...users].sort((a, b) => {
+            const aSelf = myInfo && a.id === myInfo.id ? 0 : 1;
+            const bSelf = myInfo && b.id === myInfo.id ? 0 : 1;
+            if (aSelf !== bSelf) return aSelf - bSelf;
+            return String(a.name || '').localeCompare(String(b.name || ''), 'vi');
+        });
+        if (sorted.length === 0) {
+            drawerMembersList.innerHTML = '<div class="drawer-media-empty">Chưa có thiết bị nào kết nối.</div>';
+        } else {
+            drawerMembersList.innerHTML = sorted
+                .map(u => buildMemberRowHtml(u, Boolean(myInfo && u.id === myInfo.id)))
+                .join('');
+        }
+    } else {
+        const peer = users.find(u => u.id === currentActiveChat);
+        drawerMembersHeading.textContent = peer ? 'Chi tiết thành viên (2)' : 'Chi tiết cuộc trò chuyện';
+        let html = '';
+        if (peer) {
+            html += buildMemberRowHtml(peer, false);
+        } else {
+            html += `
+                <div class="drawer-member-item is-self">
+                    <div class="drawer-member-avatar"><i class="ph-fill ph-user-minus"></i></div>
+                    <div class="drawer-member-info">
+                        <div class="drawer-member-name">${escapeHtml(getChatTitle(currentActiveChat))}</div>
+                        <div class="drawer-member-meta">Thiết bị hiện đang ngoại tuyến</div>
+                    </div>
+                </div>
+            `;
+        }
+        if (myInfo) {
+            html += buildMemberRowHtml(myInfo, true);
+        }
+        drawerMembersList.innerHTML = html;
+    }
+}
+
+function renderDrawerPinSection(preservePinInput) {
+    if (!drawerPinSection) return;
+    if (drawerPinResetBtn) {
+        drawerPinResetBtn.style.display = currentActiveChat === 'general' ? 'inline-flex' : 'none';
+    }
+    const effective = getEffectivePin(currentActiveChat);
+    if (drawerPinCurrent) {
+        const hasPin = !effective.isCleared && Boolean(effective.text);
+        drawerPinCurrent.textContent = hasPin
+            ? `${effective.updatedBy && !effective.isDefault ? `${effective.updatedBy}: ` : ''}${effective.text}`
+            : 'Chưa có tin nhắn ghim.';
+        drawerPinCurrent.classList.toggle('is-empty', !hasPin);
+    }
+    if (drawerPinInput && !(preservePinInput && document.activeElement === drawerPinInput)) {
+        drawerPinInput.value = effective.isCleared ? '' : effective.text;
+    }
+}
+
+function collectSharedMediaForChat(chatId) {
+    const history = chatHistory[chatId] || [];
+    const images = [];
+    const videos = [];
+    const files = [];
+    const links = [];
+
+    for (let i = history.length - 1; i >= 0; i--) {
+        const msg = history[i];
+        if (!msg) continue;
+        if (msg.isFile) {
+            const localBlobUrl = msg.fileUrl || restoredFileUrls[msg.id] || '';
+            const downloadUrl = localBlobUrl || msg.relayFileUrl || '';
+            const entry = {
+                id: msg.id,
+                fileName: msg.fileName || 'tap-tin',
+                fileSize: msg.fileSize || 0,
+                timestamp: msg.timestamp,
+                localBlobUrl,
+                downloadUrl,
+                senderName: (msg.from && msg.from.name) || 'Người dùng'
+            };
+            if (isImageFile(entry.fileName)) {
+                images.push(entry);
+            } else if (isVideoFile(entry.fileName)) {
+                videos.push(entry);
+            } else {
+                files.push(entry);
+            }
+        } else if (msg.content) {
+            const urls = extractUrlsFromText(msg.content);
+            urls.forEach(url => {
+                links.push({
+                    url,
+                    senderName: (msg.from && msg.from.name) || 'Người dùng',
+                    timestamp: msg.timestamp
+                });
+            });
+        }
+    }
+
+    return { images, videos, files, links };
+}
+
+function renderDrawerMedia() {
+    if (!drawerMediaSection) return;
+    const { images, videos, files, links } = collectSharedMediaForChat(currentActiveChat);
+    const visualItems = [
+        ...images.map(item => ({ ...item, kind: 'image' })),
+        ...videos.map(item => ({ ...item, kind: 'video' }))
+    ];
+    const groups = { images: visualItems, files, links };
+    const limits = { images: 8, files: 3, links: 3 };
+
+    if (countMediaImages) countMediaImages.textContent = String(visualItems.length);
+    if (countMediaFiles) countMediaFiles.textContent = String(files.length);
+    if (countMediaLinks) countMediaLinks.textContent = String(links.length);
+
+    drawerMediaToggles.forEach(toggle => {
+        const category = toggle.dataset.drawerMediaToggle;
+        const body = document.getElementById(toggle.getAttribute('aria-controls'));
+        const isOpen = Boolean(drawerMediaOpen[category]);
+        toggle.setAttribute('aria-expanded', String(isOpen));
+        if (body) body.classList.toggle('is-collapsed', !isOpen);
+        const caret = toggle.querySelector('.drawer-caret');
+        if (caret) caret.className = `ph ph-caret-${isOpen ? 'up' : 'down'} drawer-caret`;
+    });
+
+    Object.entries(groups).forEach(([category, items]) => {
+        const content = drawerMediaContents[category];
+        if (!content) return;
+        content.replaceChildren();
+        const limit = limits[category];
+        const visibleItems = drawerMediaExpanded[category] ? items : items.slice(0, limit);
+
+        if (items.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'drawer-media-empty';
+            empty.textContent = category === 'images'
+                ? 'Chưa có ảnh hoặc video nào được chia sẻ.'
+                : category === 'files' ? 'Chưa có tệp tài liệu nào.' : 'Chưa có đường dẫn (link) nào.';
+            content.appendChild(empty);
+        } else if (category === 'images') {
+            const grid = document.createElement('div');
+            grid.className = 'drawer-image-grid';
+            visibleItems.forEach(item => {
+                const canOpenImage = item.kind === 'image' && Boolean(item.localBlobUrl);
+                const canDownload = Boolean(item.downloadUrl);
+                const thumb = document.createElement(canDownload && !canOpenImage && !item.localBlobUrl ? 'a' : 'button');
+                thumb.className = `drawer-image-thumb${item.kind === 'video' ? ' drawer-video-thumb' : ''}`;
+                thumb.title = item.fileName;
+                if (thumb.tagName === 'BUTTON') thumb.type = 'button';
+                if (thumb.tagName === 'A') {
+                    thumb.href = item.downloadUrl;
+                    thumb.target = '_blank';
+                    thumb.rel = 'noopener noreferrer';
+                    thumb.download = item.fileName;
+                }
+
+                if (canOpenImage) {
+                    const img = document.createElement('img');
+                    img.src = item.localBlobUrl;
+                    img.alt = item.fileName;
+                    img.loading = 'lazy';
+                    thumb.appendChild(img);
+                    thumb.addEventListener('click', () => openImageModal(item.localBlobUrl, item.fileName));
+                } else {
+                    thumb.innerHTML = item.kind === 'video'
+                        ? '<i class="ph-fill ph-play-circle" aria-hidden="true"></i>'
+                        : '<i class="ph-fill ph-image" aria-hidden="true"></i>';
+                    if (item.kind === 'video' && item.localBlobUrl) {
+                        thumb.addEventListener('click', () => openVideoModal(item.localBlobUrl, item.fileName, item.downloadUrl));
+                    }
+                }
+                grid.appendChild(thumb);
+            });
+            content.appendChild(grid);
+        } else {
+            const list = document.createElement('div');
+            list.className = 'drawer-item-list';
+            visibleItems.forEach(item => {
+                if (category === 'files') {
+                    const card = document.createElement(item.downloadUrl ? 'a' : 'div');
+                    card.className = 'drawer-item-card';
+                    if (item.downloadUrl) {
+                        card.href = item.downloadUrl;
+                        card.target = '_blank';
+                        card.rel = 'noopener noreferrer';
+                        card.download = item.fileName;
+                    } else {
+                        card.classList.add('is-unavailable');
+                    }
+                    card.innerHTML = `
+                        <div class="drawer-item-icon"><i class="ph-fill ph-file-zip"></i></div>
+                        <div class="drawer-item-info">
+                            <div class="drawer-item-name">${escapeHtml(item.fileName)}</div>
+                            <div class="drawer-item-meta">${escapeHtml(formatFileSize(item.fileSize))} • ${escapeHtml(formatTime(item.timestamp))}${item.downloadUrl ? '' : ' • Không còn tệp đệm'}</div>
+                        </div>
+                    `;
+                    list.appendChild(card);
+                    return;
+                }
+
+                const card = document.createElement('a');
+                card.className = 'drawer-item-card';
+                card.href = item.url;
+                card.target = '_blank';
+                card.rel = 'noopener noreferrer';
+                card.innerHTML = `
+                    <div class="drawer-item-icon"><i class="ph ph-link"></i></div>
+                    <div class="drawer-item-info">
+                        <div class="drawer-item-name">${escapeHtml(item.url)}</div>
+                        <div class="drawer-item-meta">${escapeHtml(item.senderName)} • ${escapeHtml(formatTime(item.timestamp))}</div>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+            content.appendChild(list);
+        }
+
+        const moreButton = drawerMediaSection.querySelector(`[data-drawer-media-more="${category}"]`);
+        if (moreButton) {
+            moreButton.hidden = items.length <= limit;
+            moreButton.textContent = drawerMediaExpanded[category] ? 'Thu gọn' : 'Xem tất cả';
+        }
+    });
+}
+
+function renderDrawerStorage() {
+    if (!drawerStorageStats) return;
+    const stats = getChatStorageStats(currentActiveChat);
+    drawerStorageStats.innerHTML = `
+        <div class="drawer-storage-metric">
+            <span>Dung lượng tệp</span>
+            <strong>${escapeHtml(formatFileSize(stats.fileBytes))}</strong>
+            <small>${stats.fileCount} tệp trong bộ nhớ đệm</small>
+        </div>
+        <div class="drawer-storage-metric">
+            <span>Tin nhắn</span>
+            <strong>${stats.messageCount}</strong>
+            <small>tin nhắn đã lưu</small>
+        </div>
+    `;
+    if (clearCurrentChatCacheBtn) {
+        clearCurrentChatCacheBtn.disabled = stats.messageCount === 0 && stats.fileCount === 0;
+    }
+}
+
+async function clearChatCache(chatId, skipConfirm = false) {
+    const title = getChatTitle(chatId);
+    if (!skipConfirm) {
+        const ok = confirm(`Xóa toàn bộ tin nhắn và tệp đệm của "${title}" khỏi trình duyệt?`);
+        if (!ok) return;
+    }
+    const stats = getChatStorageStats(chatId);
+    const history = chatHistory[chatId] || [];
+    history.forEach(m => {
+        if (m && typeof m.fileUrl === 'string' && m.fileUrl.startsWith('blob:')) {
+            try { URL.revokeObjectURL(m.fileUrl); } catch (e) {}
+            m.fileUrl = '';
+        }
+    });
+
+    await deleteIndexedDbFilesByIds(stats.fileIds);
+
+    if (chatId === 'general') {
+        chatHistory['general'] = [];
+    } else {
+        delete chatHistory[chatId];
+    }
+    unreadCounts[chatId] = 0;
+
+    savePersistedHistory();
+    updateTabTitle();
+    updateSidebar();
+    if (currentActiveChat === chatId) {
+        renderChatHistory();
+    }
+    renderChatInfoDrawer({ preservePinInput: true });
+    if (storageModal && storageModal.classList.contains('active')) {
+        renderStorageModal();
+    }
+}
+
+if (toggleChatInfoBtn) {
+    toggleChatInfoBtn.addEventListener('click', () => {
+        if (appContainer.classList.contains('show-info')) {
+            closeChatInfoDrawer();
+        } else {
+            openChatInfoDrawer();
+        }
+    });
+}
+if (closeChatInfoBtn) {
+    closeChatInfoBtn.addEventListener('click', closeChatInfoDrawer);
+}
+if (drawerVoiceCallBtn) {
+    drawerVoiceCallBtn.addEventListener('click', () => startCall(false));
+}
+if (drawerVideoCallBtn) {
+    drawerVideoCallBtn.addEventListener('click', () => startCall(true));
+}
+if (drawerMembersToggle && drawerMembersBody) {
+    drawerMembersToggle.addEventListener('click', () => {
+        drawerMembersBody.classList.toggle('is-collapsed');
+        drawerMembersToggle.setAttribute('aria-expanded', String(!drawerMembersBody.classList.contains('is-collapsed')));
+        const caret = drawerMembersToggle.querySelector('.ph-caret-up, .ph-caret-down');
+        if (caret) {
+            caret.className = drawerMembersBody.classList.contains('is-collapsed') ? 'ph ph-caret-down' : 'ph ph-caret-up';
+        }
+    });
+}
+if (drawerPinToggle && drawerPinBody) {
+    drawerPinToggle.addEventListener('click', () => {
+        drawerPinBody.classList.toggle('is-collapsed');
+        drawerPinToggle.setAttribute('aria-expanded', String(!drawerPinBody.classList.contains('is-collapsed')));
+        const caret = drawerPinToggle.querySelector('.ph-caret-up, .ph-caret-down');
+        if (caret) {
+            caret.className = drawerPinBody.classList.contains('is-collapsed') ? 'ph ph-caret-down' : 'ph ph-caret-up';
+        }
+    });
+}
+if (drawerMembersList) {
+    drawerMembersList.addEventListener('click', (e) => {
+        const row = e.target.closest('.drawer-member-item');
+        if (!row || row.classList.contains('is-self')) return;
+        const memberId = row.dataset.memberId;
+        if (memberId) {
+            switchChat(memberId);
+            if (window.innerWidth <= 900) {
+                closeChatInfoDrawer();
+            }
+        }
+    });
+}
+if (drawerPinForm) {
+    drawerPinForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const val = drawerPinInput ? drawerPinInput.value : '';
+        submitPinnedMessage(currentActiveChat, val);
+    });
+}
+if (drawerPinClearBtn) {
+    drawerPinClearBtn.addEventListener('click', () => {
+        submitPinnedMessage(currentActiveChat, '');
+    });
+}
+if (drawerPinResetBtn) {
+    drawerPinResetBtn.addEventListener('click', () => {
+        if (currentActiveChat === 'general') {
+            submitPinnedMessage('general', '', { resetDefault: true });
+        }
+    });
+}
+drawerMediaToggles.forEach(toggle => {
+    toggle.addEventListener('click', () => {
+        const category = toggle.dataset.drawerMediaToggle;
+        if (!Object.prototype.hasOwnProperty.call(drawerMediaOpen, category)) return;
+        drawerMediaOpen[category] = !drawerMediaOpen[category];
+        renderDrawerMedia();
+    });
+});
+drawerMediaMoreButtons.forEach(button => {
+    button.addEventListener('click', () => {
+        const category = button.dataset.drawerMediaMore;
+        if (!Object.prototype.hasOwnProperty.call(drawerMediaExpanded, category)) return;
+        drawerMediaExpanded[category] = !drawerMediaExpanded[category];
+        renderDrawerMedia();
+    });
+});
+if (clearCurrentChatCacheBtn) {
+    clearCurrentChatCacheBtn.addEventListener('click', () => {
+        clearChatCache(currentActiveChat);
+    });
+}
+if (drawerOpenGlobalStorageBtn) {
+    drawerOpenGlobalStorageBtn.addEventListener('click', () => {
+        openStorageModal();
+    });
+}
+
+// =========================================================
+// GLOBAL STORAGE & SETTINGS MODAL (Quản lý bộ nhớ đệm toàn bộ chat)
+// =========================================================
+function syncSettingsInputs() {
+    if (settingHistoryLimit) {
+        settingHistoryLimit.value = String(appSettings.historyLimit);
+    }
+    if (settingSaveMedia) {
+        settingSaveMedia.checked = Boolean(appSettings.saveMedia);
+    }
+    if (settingSoundEnabled) {
+        settingSoundEnabled.checked = Boolean(appSettings.soundEnabled);
+    }
+}
+
+async function renderStorageModal() {
+    if (!storageModal) return;
+    syncSettingsInputs();
+
+    const chatIds = Array.from(new Set([
+        'general',
+        ...Object.keys(chatHistory),
+        ...Object.values(indexedDbFileMeta).map(m => m && m.chatId).filter(Boolean)
+    ]));
+
+    let totalMsgs = 0;
+    let totalFiles = 0;
+    let totalBytes = 0;
+    const rows = [];
+
+    chatIds.forEach(cid => {
+        const stats = getChatStorageStats(cid);
+        totalMsgs += stats.messageCount;
+        totalFiles += stats.fileCount;
+        totalBytes += stats.fileBytes;
+        if (cid === 'general' || stats.messageCount > 0 || stats.fileCount > 0) {
+            rows.push({
+                chatId: cid,
+                title: getChatTitle(cid),
+                ...stats
+            });
+        }
+    });
+
+    if (storageTotalMsgs) {
+        storageTotalMsgs.textContent = `${totalMsgs} tin`;
+    }
+    if (storageTotalFiles) {
+        storageTotalFiles.textContent = `${totalFiles} (${formatFileSize(totalBytes)})`;
+    }
+
+    let localStorageBytes = 0;
+    try {
+        const raw = localStorage.getItem('localchat_history_v1') || '';
+        localStorageBytes = raw.length * 2;
+    } catch (e) {}
+
+    if (storageBrowserQuota) {
+        const approxTotal = totalBytes + localStorageBytes;
+        storageBrowserQuota.textContent = `~${formatFileSize(approxTotal)}`;
+        if (navigator.storage && typeof navigator.storage.estimate === 'function') {
+            navigator.storage.estimate().then(est => {
+                if (!storageBrowserQuota) return;
+                if (est && typeof est.usage === 'number') {
+                    const quotaStr = est.quota ? ` / ${formatFileSize(est.quota)}` : '';
+                    storageBrowserQuota.textContent = `${formatFileSize(est.usage)}${quotaStr}`;
+                }
+            }).catch(() => {});
+        }
+    }
+
+    if (storageChatList) {
+        if (rows.length === 0) {
+            storageChatList.innerHTML = '<div class="drawer-media-empty">Chưa có dữ liệu đoạn chat nào được lưu.</div>';
+        } else {
+            storageChatList.innerHTML = rows.map(r => {
+                const isEmpty = r.messageCount === 0 && r.fileCount === 0;
+                return `
+                    <div class="storage-chat-row">
+                        <div class="storage-chat-row-info">
+                            <div class="storage-chat-row-name">${escapeHtml(r.title)}</div>
+                            <div class="storage-chat-row-meta">${r.messageCount} tin nhắn • ${r.fileCount} tệp (${escapeHtml(formatFileSize(r.fileBytes))})</div>
+                        </div>
+                        <button type="button" class="btn btn-danger-soft btn-xs js-clear-storage-chat" data-chat-id="${escapeHtml(r.chatId)}" ${isEmpty ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+                            Xóa đệm
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+    }
+}
+
+function openStorageModal() {
+    if (!storageModal) return;
+    storageModal.classList.add('active');
+    renderStorageModal();
+}
+
+function closeStorageModal() {
+    if (!storageModal) return;
+    storageModal.classList.remove('active');
+}
+
+if (openStorageModalBtn) {
+    openStorageModalBtn.addEventListener('click', openStorageModal);
+}
+if (closeStorageModalBtn) {
+    closeStorageModalBtn.addEventListener('click', closeStorageModal);
+}
+if (storageModal) {
+    storageModal.addEventListener('click', (e) => {
+        if (e.target === storageModal) closeStorageModal();
+    });
+}
+if (storageChatList) {
+    storageChatList.addEventListener('click', (e) => {
+        const btn = e.target.closest('.js-clear-storage-chat');
+        if (!btn || btn.disabled) return;
+        const cid = btn.dataset.chatId;
+        if (cid) clearChatCache(cid);
+    });
+}
+if (settingHistoryLimit) {
+    settingHistoryLimit.addEventListener('change', () => {
+        const val = Number(settingHistoryLimit.value);
+        appSettings.historyLimit = Number.isFinite(val) && val >= 0 ? val : 50;
+        saveAppSettings();
+        Object.keys(chatHistory).forEach(k => {
+            chatHistory[k] = applyHistoryLimit(chatHistory[k]);
+        });
+        savePersistedHistory();
+        updateSidebar();
+        renderChatHistory();
+        renderChatInfoDrawer({ preservePinInput: true });
+        renderStorageModal();
+    });
+}
+if (settingSaveMedia) {
+    settingSaveMedia.addEventListener('change', () => {
+        appSettings.saveMedia = Boolean(settingSaveMedia.checked);
+        saveAppSettings();
+    });
+}
+if (settingSoundEnabled) {
+    settingSoundEnabled.addEventListener('change', () => {
+        appSettings.soundEnabled = Boolean(settingSoundEnabled.checked);
+        saveAppSettings();
+    });
+}
+if (clearAllMediaBtn) {
+    clearAllMediaBtn.addEventListener('click', async () => {
+        const ok = confirm('Xóa toàn bộ ảnh, video và tệp trong bộ nhớ đệm IndexedDB? Tin nhắn văn bản vẫn được giữ lại.');
+        if (!ok) return;
+        Object.values(chatHistory).forEach(list => {
+            (list || []).forEach(m => {
+                if (m && typeof m.fileUrl === 'string' && m.fileUrl.startsWith('blob:')) {
+                    try { URL.revokeObjectURL(m.fileUrl); } catch (e) {}
+                    m.fileUrl = '';
+                }
+            });
+        });
+        await clearAllIndexedDbFiles();
+        renderChatHistory();
+        renderChatInfoDrawer({ preservePinInput: true });
+        renderStorageModal();
+    });
+}
+if (clearAllCacheBtn) {
+    clearAllCacheBtn.addEventListener('click', async () => {
+        const ok = confirm('Xóa toàn bộ lịch sử tin nhắn, tin nhắn ghim đã lưu và tệp đệm của TẤT CẢ đoạn chat? (Tên thiết bị và ID vẫn được giữ lại)');
+        if (!ok) return;
+        Object.values(chatHistory).forEach(list => {
+            (list || []).forEach(m => {
+                if (m && typeof m.fileUrl === 'string' && m.fileUrl.startsWith('blob:')) {
+                    try { URL.revokeObjectURL(m.fileUrl); } catch (e) {}
+                }
+            });
+        });
+        await clearAllIndexedDbFiles();
+        chatHistory = { general: [] };
+        unreadCounts = { general: 0 };
+        seenMessageIds.clear();
+        pinnedMessages = { general: null, peers: {} };
+        try {
+            localStorage.removeItem('localchat_history_v1');
+            localStorage.removeItem(PINNED_STORAGE_KEY);
+        } catch (e) {}
+        updateTabTitle();
+        updateSidebar();
+        updateChatHeader({ preservePinInput: false });
+        renderChatHistory();
+        renderChatInfoDrawer({ preservePinInput: false });
+        renderStorageModal();
+    });
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        if (videoModal && videoModal.classList.contains('active')) {
+            closeVideoModal();
+        } else if (storageModal && storageModal.classList.contains('active')) {
+            closeStorageModal();
+        }
+    }
 });
 
 // Pinned Message Toggle
@@ -1807,6 +2992,12 @@ chatForm.addEventListener('submit', (e) => {
     renderMessage(msg);
     scrollToBottom();
     updateSidebar();
+    if (appContainer.classList.contains('show-info')) {
+        renderChatInfoDrawer({ preservePinInput: true });
+    }
+    if (storageModal && storageModal.classList.contains('active')) {
+        renderStorageModal();
+    }
 
     messageInput.value = '';
 });

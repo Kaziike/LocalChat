@@ -59,6 +59,12 @@ const rooms = {}; // roomId -> { [userId]: { id, socketId, name, ip, connectedAt
 const pendingDisconnectTimers = new Map(); // `${roomId}:${userId}` -> Timeout
 const pendingTransfers = new Map(); // transferId -> { tempPath, receivedChunks, totalChunks, totalBytes, fileName, fileSize, mimeType, roomId, createdAt }
 const relayFiles = new Map(); // fileId -> { filePath, fileName, fileSize, mimeType, roomId, createdAt }
+const roomPinnedMessages = new Map(); // roomId -> { text, updatedBy, updatedAt }
+
+function sanitizePinnedMessage(rawText) {
+    if (typeof rawText !== 'string') return '';
+    return rawText.replace(/[\r\n]+/g, ' ').trim().substring(0, 300);
+}
 
 /**
  * Chuẩn hóa mã phòng tùy chọn do người dùng nhập hoặc từ URL (?room=...).
@@ -534,6 +540,16 @@ io.on('connection', (socket) => {
             roomDisplayName: roomMeta.roomDisplayName
         });
 
+        const roomPinned = roomPinnedMessages.get(currentRoomId);
+        if (roomPinned) {
+            socket.emit('pinned_message_update', {
+                chatScope: 'general',
+                text: roomPinned.text,
+                updatedBy: roomPinned.updatedBy,
+                updatedAt: roomPinned.updatedAt
+            });
+        }
+
         io.to(currentRoomId).emit('user list', getPublicRoomUsers(currentRoomId));
     }
 
@@ -590,6 +606,48 @@ io.on('connection', (socket) => {
                 roomMode: roomMeta.roomMode,
                 roomCode: roomMeta.roomCode,
                 roomDisplayName: roomMeta.roomDisplayName
+            });
+        }
+    });
+
+    // Đồng bộ tin nhắn ghim trong nhóm chung hoặc đoạn chat 1-1
+    socket.on('update_pinned_message', (payload) => {
+        if (!payload || !payload.chatScope) return;
+        const userObj = rooms[currentRoomId] && rooms[currentRoomId][userId];
+        const senderName = (userObj && userObj.name) || ip;
+        const cleanText = payload.resetDefault ? null : sanitizePinnedMessage(payload.text || '');
+        const updatedAt = new Date().toISOString();
+
+        if (payload.chatScope === 'general') {
+            if (payload.resetDefault) {
+                roomPinnedMessages.delete(currentRoomId);
+            } else {
+                roomPinnedMessages.set(currentRoomId, {
+                    text: cleanText,
+                    updatedBy: senderName,
+                    updatedAt
+                });
+            }
+            io.to(currentRoomId).emit('pinned_message_update', {
+                chatScope: 'general',
+                text: cleanText,
+                resetDefault: !!payload.resetDefault,
+                updatedBy: senderName,
+                updatedAt
+            });
+        } else {
+            const targetId = String(payload.chatScope);
+            emitToUserInRoom(currentRoomId, targetId, 'pinned_message_update', {
+                chatScope: userId,
+                text: cleanText,
+                updatedBy: senderName,
+                updatedAt
+            });
+            socket.emit('pinned_message_update', {
+                chatScope: targetId,
+                text: cleanText,
+                updatedBy: senderName,
+                updatedAt
             });
         }
     });
@@ -740,5 +798,6 @@ module.exports = {
     normalizeRoomCode,
     getLocalIPs,
     buildIceConfig,
+    sanitizePinnedMessage,
     rooms
 };

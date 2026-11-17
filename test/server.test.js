@@ -8,6 +8,7 @@ const {
     normalizeRoomCode,
     getLocalIPs,
     buildIceConfig,
+    sanitizePinnedMessage,
     rooms
 } = require('../js/server.js');
 
@@ -199,4 +200,17 @@ test('Security check - HTML Sanitization against XSS vectors', () => {
 test('Call & Room state integrity', () => {
     assert.ok(rooms !== undefined, 'Đối tượng rooms phải tồn tại');
     assert.equal(typeof rooms, 'object');
+});
+
+test('sanitizePinnedMessage - normalizes whitespace, limits length to 300, handles non-strings', () => {
+    assert.equal(sanitizePinnedMessage('  Xin   chào\r\n\nmọi   người  '), 'Xin chào mọi người');
+    assert.equal(sanitizePinnedMessage('   '), '');
+    assert.equal(sanitizePinnedMessage(null), '');
+    assert.equal(sanitizePinnedMessage(undefined), '');
+    assert.equal(sanitizePinnedMessage(12345), '');
+    assert.equal(sanitizePinnedMessage({ text: 'abc' }), '');
+
+    const longInput = 'x'.repeat(400);
+    const sanitizedLong = sanitizePinnedMessage(longInput);
+    assert.equal(sanitizedLong.length, 300);
 });

@@ -34,7 +34,7 @@
         }
     </style>
 
-    <link rel="stylesheet" type="text/css" href="/css/style.css?v=2.3.0">
+    <link rel="stylesheet" type="text/css" href="/css/style.css?v=2.4.0">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 </head>
@@ -72,6 +72,9 @@
                     <input type="text" id="user-search-input" placeholder="Tìm kiếm..." aria-label="Tìm kiếm người dùng">
                     <button class="clear-input-btn" id="clear-user-search-btn" style="display: none;" aria-label="Xóa tìm kiếm"><i class="ph ph-x-circle"></i></button>
                 </div>
+                <button type="button" class="icon-btn sidebar-settings-btn" id="open-storage-modal-btn" title="Cài đặt & Quản lý bộ nhớ đệm" aria-label="Cài đặt và quản lý bộ nhớ đệm">
+                    <i class="ph ph-gear" aria-hidden="true"></i>
+                </button>
             </div>
             <div class="chat-list" id="chat-list" role="navigation" aria-label="Danh sách cuộc trò chuyện">
                 <!-- Group Chat Item -->
@@ -129,6 +132,7 @@
                         <button class="icon-btn" id="close-msg-search-btn" title="Đóng tìm kiếm" aria-label="Đóng tìm kiếm"><i class="ph ph-x" aria-hidden="true"></i></button>
                     </div>
                     <button class="icon-btn" id="toggle-msg-search-btn" title="Tìm tin nhắn" aria-label="Tìm kiếm tin nhắn"><i class="ph ph-magnifying-glass" aria-hidden="true"></i></button>
+                    <button type="button" class="icon-btn" id="toggle-chat-info-btn" title="Thông tin & mở rộng đoạn chat" aria-label="Mở rộng thông tin đoạn chat"><i class="ph ph-sidebar-simple" aria-hidden="true"></i></button>
                 </div>
             </header>
 
@@ -176,6 +180,204 @@
                 </form>
             </footer>
         </main>
+
+        <!-- Ngăn mở rộng Thông tin đoạn chat (Thành viên, Ảnh/Video/File/Link, Tin ghim, Bộ nhớ đệm) -->
+        <aside class="chat-info-drawer" id="chat-info-drawer" aria-label="Thông tin và mở rộng đoạn chat">
+            <header class="drawer-header">
+                <button type="button" class="icon-btn drawer-close-btn" id="close-chat-info-btn" title="Đóng bảng thông tin" aria-label="Đóng bảng thông tin">
+                    <i class="ph ph-arrow-left" aria-hidden="true"></i>
+                </button>
+                <h3>Thông tin hội thoại</h3>
+            </header>
+
+            <div class="drawer-scroll-body">
+                <!-- Tổng quan & hành động nhanh -->
+                <section class="drawer-section drawer-summary" id="drawer-chat-summary">
+                    <div class="avatar drawer-avatar" id="drawer-chat-avatar">
+                        <i class="ph-fill ph-users-three" aria-hidden="true"></i>
+                    </div>
+                    <h4 class="drawer-chat-title" id="drawer-chat-title">Nhóm chung nội bộ</h4>
+                    <p class="drawer-chat-subtitle" id="drawer-chat-subtitle">Đang tải...</p>
+                    <div class="drawer-quick-actions" id="drawer-quick-actions" style="display: none;">
+                        <button type="button" class="drawer-quick-btn" id="drawer-voice-call-btn">
+                            <i class="ph-fill ph-phone" aria-hidden="true"></i>
+                            <span>Gọi thoại</span>
+                        </button>
+                        <button type="button" class="drawer-quick-btn" id="drawer-video-call-btn">
+                            <i class="ph-fill ph-video-camera" aria-hidden="true"></i>
+                            <span>Gọi video</span>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Thành viên & chi tiết kết nối -->
+                <section class="drawer-section" id="drawer-members-section">
+                    <button type="button" class="drawer-section-toggle" id="drawer-members-toggle" aria-expanded="true">
+                        <span class="drawer-section-title">
+                            <i class="ph-fill ph-users-three" aria-hidden="true"></i>
+                            <span id="drawer-members-heading">Thành viên (1)</span>
+                        </span>
+                        <i class="ph ph-caret-up drawer-caret" aria-hidden="true"></i>
+                    </button>
+                    <div class="drawer-section-body" id="drawer-members-body">
+                        <div class="drawer-members-list" id="drawer-members-list"></div>
+                    </div>
+                </section>
+
+                <!-- Tùy chỉnh tin nhắn ghim -->
+                <section class="drawer-section" id="drawer-pin-section">
+                    <button type="button" class="drawer-section-toggle" id="drawer-pin-toggle" aria-expanded="true">
+                        <span class="drawer-section-title">
+                            <i class="ph-fill ph-push-pin" aria-hidden="true"></i>
+                            <span>Tin nhắn ghim</span>
+                        </span>
+                        <i class="ph ph-caret-up drawer-caret" aria-hidden="true"></i>
+                    </button>
+                    <div class="drawer-section-body" id="drawer-pin-body">
+                        <div class="drawer-pin-current" id="drawer-pin-current" aria-live="polite"></div>
+                        <form id="drawer-pin-form" class="drawer-pin-form">
+                            <textarea id="drawer-pin-input" rows="2" maxlength="300" placeholder="Nhập nội dung ghim cho đoạn chat này..."></textarea>
+                            <div class="drawer-pin-actions">
+                                <button type="submit" class="btn btn-primary btn-xs">Lưu ghim</button>
+                                <button type="button" class="btn btn-secondary btn-xs" id="drawer-pin-clear-btn">Bỏ ghim</button>
+                                <button type="button" class="btn btn-secondary btn-xs" id="drawer-pin-reset-btn" style="display: none;">Mặc định</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- Quản lý bộ nhớ đệm đoạn chat này -->
+                <section class="drawer-section drawer-storage-section" id="drawer-storage-section">
+                    <div class="drawer-section-static-head">
+                        <span class="drawer-section-title">
+                            <i class="ph-fill ph-hard-drives" aria-hidden="true"></i>
+                            <span>Dung lượng lưu trữ</span>
+                        </span>
+                    </div>
+                    <div class="drawer-storage-summary" id="drawer-storage-stats">
+                        Đang tính toán...
+                    </div>
+                    <div class="drawer-storage-actions">
+                        <button type="button" class="btn btn-danger-soft btn-block" id="clear-current-chat-cache-btn">
+                            <i class="ph ph-trash" aria-hidden="true"></i> Xóa bộ nhớ đệm đoạn chat này
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-block" id="drawer-open-global-storage-btn">
+                            <i class="ph ph-gear" aria-hidden="true"></i> Quản lý toàn bộ bộ nhớ đệm
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Ảnh / Video / File / Link -->
+                <section class="drawer-media-collection" id="drawer-media-section" aria-label="Kho lưu trữ hội thoại">
+                    <section class="drawer-section drawer-media-group">
+                        <button type="button" class="drawer-section-toggle drawer-media-toggle" data-drawer-media-toggle="images" aria-expanded="false" aria-controls="drawer-images-content">
+                            <span class="drawer-section-title"><span>Ảnh/Video</span><span class="drawer-media-count" id="count-media-images">0</span></span>
+                            <i class="ph ph-caret-down drawer-caret" aria-hidden="true"></i>
+                        </button>
+                        <div class="drawer-section-body drawer-media-body is-collapsed" id="drawer-images-content">
+                            <div class="drawer-media-content" data-drawer-media-content="images"></div>
+                            <button type="button" class="drawer-view-all-btn" data-drawer-media-more="images">Xem tất cả</button>
+                        </div>
+                    </section>
+                    <section class="drawer-section drawer-media-group">
+                        <button type="button" class="drawer-section-toggle drawer-media-toggle" data-drawer-media-toggle="files" aria-expanded="false" aria-controls="drawer-files-content">
+                            <span class="drawer-section-title"><span>File</span><span class="drawer-media-count" id="count-media-files">0</span></span>
+                            <i class="ph ph-caret-down drawer-caret" aria-hidden="true"></i>
+                        </button>
+                        <div class="drawer-section-body drawer-media-body is-collapsed" id="drawer-files-content">
+                            <div class="drawer-media-content" data-drawer-media-content="files"></div>
+                            <button type="button" class="drawer-view-all-btn" data-drawer-media-more="files">Xem tất cả</button>
+                        </div>
+                    </section>
+                    <section class="drawer-section drawer-media-group">
+                        <button type="button" class="drawer-section-toggle drawer-media-toggle" data-drawer-media-toggle="links" aria-expanded="false" aria-controls="drawer-links-content">
+                            <span class="drawer-section-title"><span>Link</span><span class="drawer-media-count" id="count-media-links">0</span></span>
+                            <i class="ph ph-caret-down drawer-caret" aria-hidden="true"></i>
+                        </button>
+                        <div class="drawer-section-body drawer-media-body is-collapsed" id="drawer-links-content">
+                            <div class="drawer-media-content" data-drawer-media-content="links"></div>
+                            <button type="button" class="drawer-view-all-btn" data-drawer-media-more="links">Xem tất cả</button>
+                        </div>
+                    </section>
+                </section>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Global Cache & Storage Settings Modal -->
+    <div id="storage-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="storage-modal-title">
+        <div class="modal-content storage-modal-content">
+            <div class="modal-header-row">
+                <h3 id="storage-modal-title">Cài đặt & Quản lý bộ nhớ đệm</h3>
+                <button type="button" class="icon-btn" id="close-storage-modal-btn" aria-label="Đóng cài đặt bộ nhớ đệm">
+                    <i class="ph ph-x" aria-hidden="true"></i>
+                </button>
+            </div>
+
+            <div class="storage-overview-grid" id="storage-overview-grid">
+                <div class="storage-stat-card">
+                    <span class="storage-stat-label">Đoạn chat / Tin nhắn</span>
+                    <strong class="storage-stat-value" id="storage-total-msgs">0 / 0</strong>
+                </div>
+                <div class="storage-stat-card">
+                    <span class="storage-stat-label">Tệp & Media (IndexedDB)</span>
+                    <strong class="storage-stat-value" id="storage-total-files">0 tệp (0 B)</strong>
+                </div>
+                <div class="storage-stat-card">
+                    <span class="storage-stat-label">Bộ nhớ trình duyệt</span>
+                    <strong class="storage-stat-value" id="storage-browser-quota">Đang đo...</strong>
+                </div>
+            </div>
+
+            <div class="storage-settings-box">
+                <div class="storage-setting-row">
+                    <label for="setting-history-limit">Giới hạn tin nhắn mỗi đoạn chat</label>
+                    <select id="setting-history-limit">
+                        <option value="50">50 tin nhắn</option>
+                        <option value="100">100 tin nhắn</option>
+                        <option value="200">200 tin nhắn</option>
+                        <option value="500">500 tin nhắn</option>
+                        <option value="0">Không giới hạn</option>
+                    </select>
+                </div>
+                <label class="storage-checkbox-row">
+                    <input type="checkbox" id="setting-save-media" checked>
+                    <span>Lưu ảnh, video & tệp vào IndexedDB để xem lại khi F5</span>
+                </label>
+                <label class="storage-checkbox-row">
+                    <input type="checkbox" id="setting-sound-enabled" checked>
+                    <span>Phát âm báo khi có tin nhắn mới</span>
+                </label>
+            </div>
+
+            <div class="storage-chats-header">
+                <span>Chi tiết bộ nhớ đệm từng đoạn chat</span>
+            </div>
+            <div class="storage-chat-list" id="storage-chat-list"></div>
+
+            <div class="storage-modal-footer">
+                <button type="button" class="btn btn-secondary" id="clear-all-media-btn">
+                    <i class="ph ph-images" aria-hidden="true"></i> Chỉ xóa tệp/ảnh đệm
+                </button>
+                <button type="button" class="btn btn-danger" id="clear-all-cache-btn">
+                    <i class="ph ph-trash" aria-hidden="true"></i> Xóa toàn bộ
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Preview Modal -->
+    <div id="video-modal" class="modal image-modal" role="dialog" aria-modal="true" aria-label="Xem video">
+        <div class="image-modal-content video-modal-content">
+            <button type="button" class="icon-btn image-modal-close" id="video-modal-close" aria-label="Đóng trình phát video"><i class="ph ph-x" aria-hidden="true"></i></button>
+            <video id="video-modal-player" controls playsinline></video>
+            <div class="image-modal-bar">
+                <span class="image-modal-title" id="video-modal-title"></span>
+                <a id="video-modal-download" href="" download="" class="btn btn-primary image-modal-btn">
+                    <i class="ph ph-download-simple" aria-hidden="true"></i> Tải video
+                </a>
+            </div>
+        </div>
     </div>
 
     <!-- Room Management & QR Invite Modal -->
@@ -300,7 +502,7 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/js/client.js?v=2.3.0"></script>
+    <script src="/js/client.js?v=2.4.0"></script>
 </body>
 
 </html>
